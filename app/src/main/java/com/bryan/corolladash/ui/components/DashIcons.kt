@@ -326,6 +326,18 @@ object DashIcons {
       }
     }
 
+    val Refresh: ImageVector by lazy {
+      icon("refresh") {
+        p("M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.6 4.2v4.4h-4.4", fill = false, stroke = true, width = 1.9f, alpha = 1.0f)
+      }
+    }
+
+    val Mic: ImageVector by lazy {
+      icon("mic") {
+        p("M12 3.5a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0v-5a3 3 0 0 1 3-3zM6 11.5a6 6 0 0 0 12 0M12 17.5v3", fill = false, stroke = true, width = 1.8f, alpha = 1.0f)
+      }
+    }
+
     val ChevU: ImageVector by lazy {
       icon("chevu") {
         p("M5.5 15 12 8.5 18.5 15", fill = false, stroke = true, width = 2.0f, alpha = 1.0f)

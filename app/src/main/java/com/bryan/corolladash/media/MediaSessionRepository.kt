@@ -343,8 +343,10 @@ class MediaSessionRepository(
                 }.getOrNull()
             }
         }
-        fun ok(s: String?) = s?.trim()?.takeIf { it.length in 2..30 && !it.contains("bluetooth", true) }
-        runCatching { ok(c.queueTitle?.toString()) }.getOrNull()?.let { return it }
+        // No se usa el título de la cola: algunas radios envían "Cola de reproducción" / "Now playing".
+        fun ok(s: String?) = s?.trim()?.takeIf { v ->
+            v.length in 2..30 && NOT_PLAYER.none { v.contains(it, ignoreCase = true) }
+        }
         runCatching {
             val ex = c.extras ?: return null
             for (k in ex.keySet()) {
@@ -356,6 +358,8 @@ class MediaSessionRepository(
         }
         return null
     }
+
+    private val NOT_PLAYER = listOf("bluetooth", "cola", "queue", "reproducción", "reproduccion", "playlist", "now playing", "lista")
 
     // ------------------------------------------------------------------ Carátula
 
@@ -539,6 +543,16 @@ class MediaSessionRepository(
     }
 
     /** Fallback: tecla multimedia estándar. La recibe la app que tenga el foco de audio. */
+    /** El reproductor acepta "busca y reproduce" (no todas las radios lo permiten por Bluetooth). */
+    fun canSearch(): Boolean = ((controller?.playbackState?.actions ?: 0L) and PlaybackState.ACTION_PLAY_FROM_SEARCH) != 0L
+
+    /** Pide al reproductor que busque y reproduzca [query]. false = no lo permite o no hay reproductor. */
+    fun playFromSearch(query: String): Boolean {
+        val c = controller ?: return false
+        if (!canSearch()) return false
+        return runCatching { c.transportControls.playFromSearch(query, android.os.Bundle()) }.isSuccess
+    }
+
     /** Tecla multimedia enviada directamente a una app (despierta su receptor aunque no tenga sesión activa). */
     fun sendMediaButtonTo(pkg: String, code: Int) {
         for (action in intArrayOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {

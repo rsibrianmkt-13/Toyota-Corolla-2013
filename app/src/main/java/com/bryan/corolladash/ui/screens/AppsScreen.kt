@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,9 +57,10 @@ class SystemTile(
 )
 
 /**
- * Aplicaciones (1125×571):
- *  - fila fija "Sistema" con iconos blancos (abren la app configurada para cada función);
- *  - todas las apps instaladas en orden alfabético, con búsqueda.
+ * Aplicaciones (1125×571), pensada para tocar sin precisión de teléfono:
+ *  - "Sistema": accesos grandes, 4 por fila (dos filas si hace falta);
+ *  - todas las apps en 6 columnas, iconos de 72 dp y nombres de 17 sp, con desplazamiento vertical.
+ * Todo desplaza junto en una sola cuadrícula de 12 columnas (Sistema ocupa 3, cada app 2).
  */
 @Composable
 fun AppsScreen(
@@ -81,27 +83,27 @@ fun AppsScreen(
             Text("Aplicaciones", style = DashType.LargeTitle, modifier = Modifier.weight(1f))
             SearchField(query, { query = it }, enabled = canSearch)
         }
+        Spacer(Modifier.height(16.dp))
 
-        if (q.isEmpty()) {
-            Spacer(Modifier.height(20.dp))
-            SectionLabel("Sistema")
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                system.forEach { t -> SystemTileView(t) { onSystem(t) } }
+        LazyVerticalGrid(
+            GridCells.Fixed(12),
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            if (q.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "sys-label") { SectionLabel("Sistema") }
+                items(system, key = { "sys-" + it.label }, span = { GridItemSpan(3) }) { t -> SystemTileView(t) { onSystem(t) } }
+                item(span = { GridItemSpan(maxLineSpan) }, key = "sp") { Spacer(Modifier.height(6.dp)) }
             }
-        }
-
-        Spacer(Modifier.height(24.dp))
-        SectionLabel(if (q.isEmpty()) "Todas las aplicaciones · ${list.size}" else "Resultados · ${list.size}")
-        when {
-            apps == null -> Text("Cargando aplicaciones…", style = DashType.Label)
-            list.isEmpty() -> Text("No hay apps con ese nombre", style = DashType.Label)
-            else -> LazyVerticalGrid(
-                GridCells.Fixed(8),
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                items(list, key = { it.packageName }) { app -> AppCell(app) { onLaunch(app.packageName) } }
+            item(span = { GridItemSpan(maxLineSpan) }, key = "apps-label") {
+                SectionLabel(if (q.isEmpty()) "Todas las aplicaciones · ${list.size}" else "Resultados · ${list.size}")
+            }
+            when {
+                apps == null -> item(span = { GridItemSpan(maxLineSpan) }, key = "loading") { Text("Cargando aplicaciones…", style = DashType.Label) }
+                list.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }, key = "empty") { Text("No hay apps con ese nombre", style = DashType.Label) }
+                else -> items(list, key = { it.packageName }, span = { GridItemSpan(2) }) { app -> AppCell(app) { onLaunch(app.packageName) } }
             }
         }
     }
@@ -109,27 +111,29 @@ fun AppsScreen(
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text.uppercase(), style = DashType.Caption, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
+    Text(text.uppercase(), style = DashType.Caption, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
 }
 
+/** Acceso de sistema: icono + nombre en horizontal, 76 de alto. */
 @Composable
 private fun SystemTileView(t: SystemTile, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
-    Column(
+    val shape = RoundedCornerShape(24.dp)
+    Row(
         Modifier
-            .size(140.dp, 118.dp)
+            .fillMaxWidth()
+            .height(76.dp)
             .clip(shape)
             .background(Dash.CardElevated)
             .border(1.dp, Dash.Border, shape)
-            .clickable(onClickLabel = t.label, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .clickable(onClickLabel = t.label, onClick = onClick)
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.height(78.dp), contentAlignment = Alignment.Center) {
-            // Sin configurar: icono gris (al tocar se abre su selector).
-            DashIcon(t.icon, t.iconSize, if (t.configured) Dash.Text else Dash.Icon2)
-        }
+        // Sin configurar: icono gris (al tocar se abre su selector).
+        DashIcon(t.icon, 32, if (t.configured) Dash.Text else Dash.Icon2)
+        Spacer(Modifier.width(16.dp))
         Text(
-            t.label, style = DashType.Label.copy(fontSize = 16.sp, color = if (t.configured) Dash.TextReadable else Dash.Text3),
+            t.label, style = DashType.Headline.copy(fontSize = 18.sp, color = if (t.configured) Dash.Text else Dash.Text3),
             maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
     }
@@ -138,15 +142,15 @@ private fun SystemTileView(t: SystemTile, onClick: () -> Unit) {
 @Composable
 private fun AppCell(app: AppEntry, onClick: () -> Unit) {
     Column(
-        Modifier.clip(RoundedCornerShape(18.dp)).clickable(onClickLabel = app.label, onClick = onClick).padding(vertical = 6.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).clickable(onClickLabel = app.label, onClick = onClick).padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Image(app.icon, contentDescription = null, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)))
+        Image(app.icon, contentDescription = null, modifier = Modifier.size(72.dp).clip(RoundedCornerShape(18.dp)))
         Spacer(Modifier.height(10.dp))
         Text(
-            app.label, style = DashType.Label.copy(fontSize = 15.sp, color = Dash.TextReadable),
+            app.label, style = DashType.Label.copy(fontSize = 17.sp, color = Dash.TextReadable),
             maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
         )
     }
 }

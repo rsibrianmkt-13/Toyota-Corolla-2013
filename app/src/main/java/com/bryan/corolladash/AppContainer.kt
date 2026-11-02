@@ -50,6 +50,7 @@ class AppContainer(context: Context) {
     val media = MediaSessionRepository(app, config, scope)
     val gps = GpsSpeedRepository(app)
     val calls = CallRepository(app, config)
+    val messages = com.bryan.corolladash.messages.MessageRepository(app, scope)
     val lyrics = LyricsRepository(app, config, media.state, scope)
     val odometer = Odometer(app)
     val fuel = FuelRepository(app)

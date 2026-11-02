@@ -49,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -56,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
@@ -308,6 +310,9 @@ fun MusicScreen(
     driving: Boolean,
     onLyricsOpened: () -> Unit,
     phoneName: String? = null,
+    onRetryLyrics: () -> Unit = {},
+    onSearch: () -> Unit = {},
+    onVoice: () -> Unit = {},
 ) {
     val st = status(m, phoneConnected)
     var showLyrics by remember { mutableStateOf(false) }
@@ -324,9 +329,9 @@ fun MusicScreen(
         modifier = Modifier.fillMaxSize(),
     ) { full ->
         if (full) {
-            BigLyricsScreen(m, lyrics, driving, actions, onClose = { showLyrics = false })
+            BigLyricsScreen(m, lyrics, driving, actions, onClose = { showLyrics = false }, onRetry = onRetryLyrics)
         } else {
-            NowPlaying(m, phoneName, st, actions, canLyrics) {
+            NowPlaying(m, phoneName, st, actions, canLyrics, onSearch, onVoice) {
                 showLyrics = true
                 onLyricsOpened()
             }
@@ -335,7 +340,16 @@ fun MusicScreen(
 }
 
 @Composable
-private fun NowPlaying(m: MediaState, phoneName: String?, st: MusicStatus, actions: MusicActions, canLyrics: Boolean, onLyrics: () -> Unit) {
+private fun NowPlaying(
+    m: MediaState,
+    phoneName: String?,
+    st: MusicStatus,
+    actions: MusicActions,
+    canLyrics: Boolean,
+    onSearch: () -> Unit,
+    onVoice: () -> Unit,
+    onLyrics: () -> Unit,
+) {
     val enabled = st == MusicStatus.PLAYING || st == MusicStatus.IDLE
     val swipe = rememberSwipe()
     val volume = rememberVolumeHud()
@@ -393,6 +407,9 @@ private fun NowPlaying(m: MediaState, phoneName: String?, st: MusicStatus, actio
                 Modifier.offset((cx + 250 - 32).dp, (cy - 32).dp), onClick = actions.cycleRepeat,
             )
         }
+        // Buscar canción (teclado) y micrófono, arriba a la derecha.
+        RoundLineButton(DashIcons.Search, "Buscar canción", Modifier.offset((1125 - 24 - 52 - 12 - 52).dp, 0.dp), onSearch)
+        RoundLineButton(DashIcons.Mic, "Buscar por voz", Modifier.offset((1125 - 24 - 52).dp, 0.dp), onVoice)
         if (canLyrics) {
             Row(
                 Modifier.offset((cx - 170).dp, 536.dp).size(340.dp, 32.dp).clip(RoundedCornerShape(16.dp))
@@ -410,6 +427,62 @@ private fun NowPlaying(m: MediaState, phoneName: String?, st: MusicStatus, actio
 }
 
 private val HintColor = Color(0x998E8E93)
+
+/** Botón redondo de solo línea (mismo estilo que los accesos del Inicio). */
+@Composable
+private fun RoundLineButton(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.size(52.dp).clip(CircleShape).border(1.dp, Color(0x21FFFFFF), CircleShape)
+            .clickable(onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { DashIcon(icon, 24, Color(0xB3EBEBF0)) }
+}
+
+/**
+ * Buscar una canción con el teclado (solo detenido). El texto se envía al reproductor por Bluetooth;
+ * si la radio no lo permite, se avisa y se ofrece el micrófono ("Ok Google").
+ */
+@Composable
+fun SongSearchOverlay(visible: Boolean, onSearch: (String) -> Unit, onVoice: () -> Unit, onDismiss: () -> Unit) {
+    AnimatedVisibility(visible, enter = fadeIn(tween(180)), exit = fadeOut(tween(150))) {
+        var text by remember { mutableStateOf("") }
+        val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+        LaunchedEffect(Unit) { delay(150); runCatching { focus.requestFocus() } }
+        Box(
+            Modifier.fillMaxSize().background(Color(0xB3000000))
+                .clickable(remember { MutableInteractionSource() }, null, onClick = onDismiss)
+        ) {
+            val shape = RoundedCornerShape(24.dp)
+            Row(
+                Modifier.offset(240.dp, 140.dp).size(800.dp, 76.dp).clip(shape).background(Color(0xFF16171A))
+                    .border(1.dp, Dash.BorderStrong, shape)
+                    .clickable(remember { MutableInteractionSource() }, null) {}
+                    .padding(horizontal = 22.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DashIcon(DashIcons.Search, 26, Dash.Text2)
+                Spacer(Modifier.width(14.dp))
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (text.isEmpty()) Text("Canción o artista", style = DashType.Body.copy(fontSize = 22.sp, color = Dash.Text3), maxLines = 1)
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        singleLine = true,
+                        textStyle = DashType.Body.copy(fontSize = 22.sp, color = Dash.Text),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Dash.Text),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { if (text.isNotBlank()) onSearch(text.trim()) }),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                RoundLineButton(DashIcons.Mic, "Buscar por voz", Modifier, onVoice)
+                Spacer(Modifier.width(10.dp))
+                PillButton("Buscar", { if (text.isNotBlank()) onSearch(text.trim()) }, strong = true, enabled = text.isNotBlank())
+            }
+        }
+    }
+}
 
 /** "Spotify · iPhone de Bryan" con el icono de Bluetooth. */
 @Composable
@@ -763,6 +836,34 @@ internal fun VolumeControl(actions: MusicActions, modifier: Modifier) {
     }
 }
 
+/** Cuenta toques en la pantalla (sin consumirlos) para mostrar controles que se ocultan solos. */
+internal class TouchTicker {
+    var tick by mutableIntStateOf(0)
+}
+
+internal fun Modifier.onAnyTouch(t: TouchTicker): Modifier = pointerInput(t) {
+    awaitPointerEventScope {
+        while (true) {
+            val e = awaitPointerEvent(PointerEventPass.Initial)
+            if (e.changes.any { it.pressed }) t.tick++
+        }
+    }
+}
+
+/** Volumen + / − que aparece al tocar la pantalla y se oculta a los 2 s sin uso. */
+@Composable
+internal fun AutoHideVolume(actions: MusicActions, tick: Int, modifier: Modifier) {
+    var visible by remember { mutableStateOf(true) }
+    LaunchedEffect(tick) {
+        visible = true
+        delay(2_000)
+        visible = false
+    }
+    AnimatedVisibility(visible, modifier = modifier, enter = fadeIn(tween(150)), exit = fadeOut(tween(350))) {
+        VolumeControl(actions, Modifier)
+    }
+}
+
 // ---------------------------------------------------------------- Letra en grande (Música)
 
 /**
@@ -770,12 +871,14 @@ internal fun VolumeControl(actions: MusicActions, modifier: Modifier) {
  * Se abre deslizando hacia arriba en el reproductor; deslizar hacia abajo, a la izquierda o ✕ vuelve.
  */
 @Composable
-private fun BigLyricsScreen(m: MediaState, lyrics: LyricsState, driving: Boolean, actions: MusicActions, onClose: () -> Unit) {
+private fun BigLyricsScreen(m: MediaState, lyrics: LyricsState, driving: Boolean, actions: MusicActions, onClose: () -> Unit, onRetry: () -> Unit) {
     val close by rememberUpdatedState(onClose)
     val volume = rememberVolumeHud()
+    val touches = remember { TouchTicker() }
     Box(
         Modifier
             .fillMaxSize()
+            .onAnyTouch(touches)
             .pointerInput(Unit) {
                 val threshold = 90.dp.toPx()
                 var total = 0f
@@ -804,8 +907,8 @@ private fun BigLyricsScreen(m: MediaState, lyrics: LyricsState, driving: Boolean
             contentAlignment = Alignment.Center,
         ) { DashIcon(DashIcons.X, 22, Dash.Icon) }
 
-        LyricsPage(m, lyrics, driving, Modifier.at(20, 100, 1125 - 140, 400))
-        VolumeControl(actions, Modifier.offset((1125 - 32 - 64).dp, 150.dp))
+        LyricsPage(m, lyrics, driving, Modifier.at(20, 100, 1125 - 140, 400), onRetry = onRetry)
+        AutoHideVolume(actions, touches.tick, Modifier.offset((1125 - 32 - 64).dp, 150.dp))
 
         if (m.durationMs > 0) Progress(m, x = 60, y = 528, w = 1005, seekable = m.canSeek && !driving, onSeek = actions.seekTo)
         VolumeHud(volume, Modifier.align(Alignment.Center))

@@ -1,4 +1,4 @@
-# Corolla Dash — v1.1.0
+# Corolla Dash — v1.2.0
 
 Dashboard/launcher para la pantalla VECHTEL (`auto_rk_t20`, Android 15, 1280×720) del Toyota Corolla 2013.
 Kotlin + Jetpack Compose. Funciona sin Internet. Solo muestra datos reales.
@@ -149,3 +149,12 @@ Descarga directa del último APK: https://github.com/rsibrianmkt-13/Toyota-Corol
 - **Menú lateral** de alto completo; sin fondo ondulado arriba; fecha corta ("28 oct").
 - **Ícono** con el logo de Toyota.
 - **Música BT**: al conectar el teléfono o al tocar play sin reproductor, CorollaDash despierta la app Música BT de la radio y vuelve sola.
+
+## Novedades v1.2.0
+
+- **Android Auto**: si la app de proyección (csrplay…) tiene una pantalla propia de Android Auto, se abre directo ahí (Diagnóstico lista sus actividades).
+- **Música**: botones de **buscar** (teclado, solo detenido) y **micrófono**. Se envía la búsqueda al reproductor por Bluetooth; si la radio no lo permite, el micrófono abre el asistente ("Ok Google").
+- **Origen**: ya no aparece "Cola de reproducción" como nombre del reproductor.
+- **Aplicaciones**: 6 columnas, iconos de 72 dp y nombres de 17 sp; Sistema en dos filas de accesos grandes; todo desplaza junto.
+- **Letra**: línea actual 46 sp, vecinas 27/25 sp, máximo 5 líneas; el volumen lateral se oculta a los 2 s y vuelve al tocar; icono para **recargar** la letra.
+- **Avisos de mensajes** (WhatsApp, Telegram, SMS) de apps instaladas en la radio; en movimiento solo el remitente.

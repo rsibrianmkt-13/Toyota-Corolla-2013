@@ -111,6 +111,39 @@ class AppLauncher(private val context: Context) {
         return ok
     }
 
+    /** Actividades exportadas de un package (para Diagnóstico y para abrir un modo concreto). */
+    fun activitiesOf(packageName: String?): List<String> = runCatching {
+        if (packageName.isNullOrBlank()) return emptyList()
+        @Suppress("DEPRECATION")
+        pm.getPackageInfo(packageName, PackageManager.GET_ACTIVITIES).activities.orEmpty()
+            .filter { it.exported }
+            .map { it.name }
+    }.getOrDefault(emptyList())
+
+    /**
+     * Apps de proyección (csrplay, zlink…) sirven para CarPlay y Android Auto y suelen abrir en CarPlay.
+     * Si el package tiene una actividad propia de Android Auto, se abre esa; si no, la de inicio normal.
+     */
+    fun launchAndroidAuto(packageName: String?): Boolean {
+        if (packageName.isNullOrBlank()) return false
+        val aa = activitiesOf(packageName).firstOrNull { name ->
+            val n = name.lowercase()
+            val simple = n.substringAfterLast('.')
+            "carplay" !in n && ("androidauto" in n || "android_auto" in n || "aauto" in n || ".aa." in n || simple.startsWith("aa"))
+        }
+        if (aa != null) {
+            val ok = runCatching {
+                context.startActivity(
+                    Intent().setClassName(packageName, aa).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }.isSuccess
+            recentLaunches.addFirst(LaunchReport(packageName, labelOf(packageName), true, aa, if (ok) null else "no se pudo abrir $aa", ok))
+            while (recentLaunches.size > 10) recentLaunches.removeLast()
+            if (ok) return true
+        }
+        return launch(packageName)
+    }
+
     fun labelOf(packageName: String?): String? {
         if (packageName.isNullOrBlank()) return null
         labels[packageName]?.let { return it }

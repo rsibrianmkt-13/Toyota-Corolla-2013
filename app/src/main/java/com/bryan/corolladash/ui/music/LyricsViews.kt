@@ -293,7 +293,7 @@ private fun Centered(title: String, subtitle: String?) {
  * Detenido: 5 líneas (2 anteriores, la actual grande, 2 siguientes). En movimiento: 3 líneas.
  */
 @Composable
-fun LyricsPage(m: MediaState, lyrics: LyricsState, driving: Boolean, modifier: Modifier) {
+fun LyricsPage(m: MediaState, lyrics: LyricsState, driving: Boolean, modifier: Modifier, onRetry: (() -> Unit)? = null) {
     Box(modifier, contentAlignment = Alignment.Center) {
         when (val r = lyrics.result) {
             is LyricsResult.Synced -> {
@@ -311,15 +311,15 @@ fun LyricsPage(m: MediaState, lyrics: LyricsState, driving: Boolean, modifier: M
                         for (k in -span..span) {
                             val t = lines(r.lines, i + k)
                             val style = when {
-                                k == 0 -> DashType.Title.copy(fontSize = 54.sp, lineHeight = 64.sp, fontWeight = FontWeight.SemiBold, color = Dash.Text)
-                                k == 1 -> DashType.Body.copy(fontSize = 30.sp, lineHeight = 38.sp, fontWeight = FontWeight.Medium, color = Dash.Text2)
-                                k == -1 -> DashType.Body.copy(fontSize = 30.sp, lineHeight = 38.sp, fontWeight = FontWeight.Medium, color = Dash.Text3)
-                                else -> DashType.Body.copy(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium, color = Dash.Text3.copy(alpha = 0.55f))
+                                k == 0 -> DashType.Title.copy(fontSize = 46.sp, lineHeight = 54.sp, fontWeight = FontWeight.SemiBold, color = Dash.Text)
+                                k == 1 -> DashType.Body.copy(fontSize = 27.sp, lineHeight = 34.sp, fontWeight = FontWeight.Medium, color = Dash.Text2)
+                                k == -1 -> DashType.Body.copy(fontSize = 27.sp, lineHeight = 34.sp, fontWeight = FontWeight.Medium, color = Dash.Text3)
+                                else -> DashType.Body.copy(fontSize = 25.sp, lineHeight = 32.sp, fontWeight = FontWeight.Medium, color = Dash.Text3.copy(alpha = 0.55f))
                             }
                             Text(
                                 t, style = style.copy(textAlign = TextAlign.Center, letterSpacing = if (k == 0) (-0.8).sp else (-0.2).sp),
                                 maxLines = if (k == 0) 2 else 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(vertical = if (k == 0) 14.dp else 8.dp),
+                                modifier = Modifier.padding(vertical = if (k == 0) 12.dp else 6.dp),
                             )
                         }
                     }
@@ -330,10 +330,21 @@ fun LyricsPage(m: MediaState, lyrics: LyricsState, driving: Boolean, modifier: M
             } else {
                 PlainList(r.lines)
             }
-            else -> Centered(
-                if (m.title == null) "Sin reproducción" else message(r).orEmpty(),
-                (r as? LyricsResult.Error)?.technical ?: m.title?.let { listOfNotNull(it, m.artist).joinToString(" · ") },
-            )
+            else -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
+                Text(if (m.title == null) "Sin reproducción" else message(r).orEmpty(), style = DashType.Headline.copy(fontSize = 22.sp, color = Dash.Text2))
+                ((r as? LyricsResult.Error)?.technical ?: m.title?.let { listOfNotNull(it, m.artist).joinToString(" · ") })?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = DashType.Label.copy(color = Dash.Text3), maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                }
+                // Recargar: solo un icono, sin fondo. Vuelve a pedir la letra (también si antes no se encontró).
+                if (onRetry != null && m.title != null && (r is LyricsResult.Error || r is LyricsResult.Offline || r is LyricsResult.NotFound)) {
+                    Spacer(Modifier.height(14.dp))
+                    Box(
+                        Modifier.size(52.dp).clip(CircleShape).clickable(onClickLabel = "Volver a buscar la letra", onClick = onRetry),
+                        contentAlignment = Alignment.Center,
+                    ) { DashIcon(DashIcons.Refresh, 28, Dash.Icon2) }
+                }
+            }
         }
     }
 }

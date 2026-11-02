@@ -8,7 +8,8 @@ import com.bryan.corolladash.CorollaDashApp
  * No muestra ni guarda notificaciones. Existe porque Android exige un NotificationListener
  * habilitado para leer las MediaSession activas. Además:
  *  - busca la carátula en la notificación de la app Música BT (solo de ese package);
- *  - detecta llamadas (notificaciones de llamada) para el aviso de llamada entrante.
+ *  - detecta llamadas (notificaciones de llamada) para el aviso de llamada entrante;
+ *  - muestra un aviso breve de mensajes (WhatsApp, SMS…) de apps instaladas en la radio; no se guardan.
  */
 class MediaListenerService : NotificationListenerService() {
 
@@ -36,11 +37,13 @@ class MediaListenerService : NotificationListenerService() {
         val c = container() ?: return
         c.media.onNotificationChanged(sbn.packageName)
         c.calls.onPosted(sbn)
+        c.messages.onPosted(sbn)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         sbn ?: return
         container()?.calls?.onRemoved(sbn)
+        container()?.messages?.onRemoved(sbn)
     }
 
     private fun container() = (application as? CorollaDashApp)?.container

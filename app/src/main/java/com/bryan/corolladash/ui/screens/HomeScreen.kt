@@ -83,6 +83,8 @@ class HomeActions(
     val go: () -> Unit,
     /** Tocar el carro abre Combustible (registrar recarga / consumo). */
     val openFuel: () -> Unit,
+    /** Volver a pedir la letra (botón de recargar). */
+    val retryLyrics: () -> Unit = {},
 )
 
 private const val TOP = 100
@@ -144,13 +146,17 @@ fun HomeScreen(
                         TripCard(trip, tankUsed, a.openFuel, Modifier.at(SIDE_X, TOP + SIDE_W + 18, SIDE_W, CARD_H - SIDE_W - 18))
                     }
                     HomePage.CLEAN -> CleanScene(speed, media, phoneConnected, phoneName, music, a, onSwipe = { go(it) })
-                    HomePage.LYRICS -> Box(Modifier.fillMaxSize()) {
-                        LyricsPage(
-                            media, lyrics, driving,
-                            Modifier.at(133, 0, 1060, 720).pageSwipe { go(it) },
-                        )
-                        // Volumen táctil (+ / −, pasos de 10 %).
-                        VolumeControl(music, Modifier.offset((1280 - 26 - 64).dp, 250.dp))
+                    HomePage.LYRICS -> {
+                        val touches = remember { TouchTicker() }
+                        Box(Modifier.fillMaxSize().onAnyTouch(touches)) {
+                            LyricsPage(
+                                media, lyrics, driving,
+                                Modifier.at(133, 0, 1060, 720).pageSwipe { go(it) },
+                                onRetry = a.retryLyrics,
+                            )
+                            // Volumen táctil (+ / −, pasos de 10 %): aparece al tocar y se oculta solo.
+                            AutoHideVolume(music, touches.tick, Modifier.offset((1280 - 26 - 64).dp, 250.dp))
+                        }
                     }
                 }
             }

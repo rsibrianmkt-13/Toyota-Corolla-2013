@@ -64,6 +64,12 @@ class LyricsRepository(
         if (r is LyricsResult.Offline || r is LyricsResult.Error) retryTick.value++
     }
 
+    /** Botón de recargar: vuelve a pedir la letra aunque antes no se haya encontrado. */
+    fun forceRetry() {
+        _state.value.song?.let { cache.removeMemory(it.cacheKey) }
+        retryTick.value++
+    }
+
     private suspend fun load(song: SongIdentity?) {
         if (song == null) {
             _state.value = LyricsState()

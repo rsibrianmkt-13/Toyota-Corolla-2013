@@ -86,6 +86,8 @@ import com.bryan.corolladash.ui.screens.HomeScreen
 import com.bryan.corolladash.ui.screens.MusicActions
 import com.bryan.corolladash.ui.screens.MusicScreen
 import com.bryan.corolladash.ui.screens.MusicBackdrop
+import com.bryan.corolladash.ui.screens.MessageBanner
+import com.bryan.corolladash.ui.screens.SongSearchOverlay
 import com.bryan.corolladash.ui.screens.QuickActions
 import com.bryan.corolladash.ui.screens.QuickSettingsPanel
 import com.bryan.corolladash.ui.screens.RestMode
@@ -159,6 +161,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
 
     var settingsPage by remember { mutableStateOf<SettingsPage>(SettingsPage.Root) }
     var quickOpen by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
     var pendingConfirm by remember { mutableStateOf<(() -> Unit)?>(null) }
     var confirmedUntil by remember { mutableLongStateOf(0L) }
     var toast by remember { mutableStateOf<String?>(null) }
@@ -275,7 +278,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
         val pkg = packages[app].orEmpty()
         if (pkg.isBlank()) {
             if (moving) { toast = "Configura ${app.label} con el vehículo detenido" } else { guard { openSettings(SettingsPage.AppSelect(app)) } }
-        } else if (!c.launcher.launch(pkg)) {
+        } else if (!(if (app == ExternalApp.ANDROID_AUTO) c.launcher.launchAndroidAuto(pkg) else c.launcher.launch(pkg))) {
             toast = "No se pudo abrir ${app.label}"
         }
     }
@@ -288,14 +291,60 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
         if (!ok) { toast = "No hay app de navegación para abrir el destino" }
     }
 
+    // ---------------------------------------------------------------- Buscar canción (teclado / voz)
+
+    /** Envía la búsqueda al reproductor Bluetooth; si la radio no lo permite, lo dice. */
+    fun searchSong(q: String) {
+        searchOpen = false
+        toast = if (c.media.playFromSearch(q)) "Buscando “$q”…" else "Tu radio no permite buscar por Bluetooth · usa el micrófono"
+    }
+
+    /** "Ok Google": el asistente de la radio (en muchas radios, el del teléfono por Bluetooth). */
+    fun openAssistant() {
+        val intents = listOf(
+            android.content.Intent(android.content.Intent.ACTION_VOICE_COMMAND),
+            android.content.Intent("android.intent.action.VOICE_ASSIST"),
+            android.content.Intent(android.content.Intent.ACTION_ASSIST),
+        )
+        val ok = intents.any { i ->
+            runCatching { ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+        }
+        if (!ok) toast = "No hay asistente de voz en la radio"
+    }
+
+    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val text = res.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (!text.isNullOrBlank()) searchSong(text)
+    }
+
+    /** Micrófono: si la radio acepta búsquedas, voz → texto → búsqueda; si no, "Ok Google". */
+    fun startVoice() {
+        searchOpen = false
+        if (!c.media.canSearch()) {
+            openAssistant()
+            return
+        }
+        val i = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "es-419")
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "¿Qué canción quieres escuchar?")
+        if (runCatching { voiceLauncher.launch(i) }.isFailure) openAssistant()
+    }
+
+    /** Lupa: escribir solo con el vehículo detenido. */
+    fun openSongSearch() {
+        if (moving) toast = "Detén el vehículo para escribir · usa el micrófono" else searchOpen = true
+    }
+
     fun launchApp(pkg: String): Boolean {
         val ok = c.launcher.launch(pkg)
         if (!ok) { toast = "No se pudo abrir la app" }
         return ok
     }
 
-    BackHandler(enabled = rest != null || pendingConfirm != null || quickOpen || section.value != Section.HOME) {
+    BackHandler(enabled = rest != null || pendingConfirm != null || quickOpen || searchOpen || section.value != Section.HOME) {
         when {
+            searchOpen -> { searchOpen = false }
             rest != null -> { wake() }
             pendingConfirm != null -> { pendingConfirm = null }
             quickOpen -> { quickOpen = false }
@@ -334,6 +383,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
             openMap = { section.value = Section.MAP },
             go = { destination?.let { navigateTo(it) } },
             openFuel = { section.value = Section.FUEL },
+            retryLyrics = { c.lyrics.forceRetry() },
         )
     }
 
@@ -447,6 +497,9 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
                             driving = moving,
                             onLyricsOpened = { c.lyrics.retry() },
                             phoneName = phoneName,
+                            onRetryLyrics = { c.lyrics.forceRetry() },
+                            onSearch = { openSongSearch() },
+                            onVoice = { startVoice() },
                         )
                         Section.APPS -> AppsScreen(
                             system = systemTiles,
@@ -560,6 +613,13 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
         }
         }
 
+        SongSearchOverlay(
+            visible = searchOpen,
+            onSearch = { q -> searchSong(q) },
+            onVoice = { startVoice() },
+            onDismiss = { searchOpen = false },
+        )
+
         QuickSettingsPanel(
             visible = quickOpen,
             bluetoothOn = btOn,
@@ -636,6 +696,13 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
         rest?.let { mode -> RestScreen(mode, media, resumeTick, onWake = { wake() }) }
 
         // La llamada queda por encima de todo, incluso del reposo.
+        val message by c.messages.current.collectAsStateWithLifecycle()
+        MessageBanner(
+            alert = if (call == null) message else null,
+            driving = moving,
+            onOpen = { if (!c.messages.open()) toast = "No se pudo abrir el mensaje" },
+            onDismiss = { c.messages.dismiss() },
+        )
         CallBanner(
             call = call,
             onAction = { a ->
@@ -732,6 +799,8 @@ private fun buildDiagnostics(c: AppContainer, hasLocation: Boolean, hasBtPerm: B
         "Llamada activa" to (call?.let { "${it.caller} · ${if (it.incoming) "entrante" else "en curso"} · ${it.packageName}" } ?: "no"),
         "Botones" to (call?.actions?.joinToString { it.label } ?: "—"),
     ) + synchronized(c.calls.recent) { c.calls.recent.toList() }.mapIndexed { i, l -> "Aviso ${i + 1}" to l })
+    out += DiagSection("Avisos de mensajes", synchronized(c.messages.recent) { c.messages.recent.toList() }.mapIndexed { i, l -> "Aviso ${i + 1}" to l }
+        .ifEmpty { listOf("Último" to "ninguno (solo apps instaladas en la radio)") })
     out += DiagSection("Lyrics", c.lyrics.diagnostics())
     out += DiagSection("Mapa y destino", listOf(
         "Destino" to (c.nav.destination.value?.let { "${it.name} (${it.lat}, ${it.lon})" } ?: "—"),
@@ -754,6 +823,8 @@ private fun buildDiagnostics(c: AppContainer, hasLocation: Boolean, hasBtPerm: B
             else -> "$pkg (no instalada)"
         }
     })
+    out += DiagSection("Actividades de Android Auto (${c.config.packageOf(ExternalApp.ANDROID_AUTO).ifBlank { "sin app" }})",
+        c.launcher.activitiesOf(c.config.packageOf(ExternalApp.ANDROID_AUTO)).take(25).mapIndexed { i, a -> "#${i + 1}" to a })
     out += DiagSection("Últimos intentos de abrir apps", c.launcher.recentLaunches.map { r ->
         r.packageName to (if (r.ok) "OK" else "falló: ${r.error ?: "?"} · intent=${r.launchIntent ?: "ninguno"}")
     })

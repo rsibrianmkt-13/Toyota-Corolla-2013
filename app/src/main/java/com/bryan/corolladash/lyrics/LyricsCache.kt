@@ -23,6 +23,9 @@ class LyricsCache(context: Context) {
     @Synchronized
     fun putMemory(key: String, r: LyricsResult) { memory[key] = r }
 
+    @Synchronized
+    fun removeMemory(key: String) { memory.remove(key) }
+
     fun disk(key: String): LyricsResult? = runCatching {
         val f = file(key)
         if (!f.exists()) return null
