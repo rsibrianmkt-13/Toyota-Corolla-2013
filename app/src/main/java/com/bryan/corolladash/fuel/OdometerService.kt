@@ -86,7 +86,8 @@ class OdometerService : Service() {
             d / seconds > 70f -> last = l                                   // > 250 km/h: salto del GPS
             d < 10f && (!l.hasSpeed() || l.speed < 1.5f) -> Unit            // detenido: ruido, no mover el ancla
             else -> {
-                odometer()?.add(d.toDouble())
+                // Tiempo en marcha del viaje: como mucho 15 s por tramo (huecos de GPS no cuentan de más).
+                odometer()?.add(d.toDouble(), (l.time - p.time).coerceIn(0L, 15_000L))
                 last = l
             }
         }

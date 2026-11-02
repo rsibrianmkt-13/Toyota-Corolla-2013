@@ -22,7 +22,7 @@ android {
         targetSdk = 35
         // En GitHub Actions: 100 + número de ejecución (siempre sube → la app detecta la actualización).
         versionCode = (project.findProperty("ciVersionCode") as String?)?.toInt() ?: 14
-        versionName = "1.0.0"
+        versionName = "1.1.0"
     }
 
     signingConfigs {

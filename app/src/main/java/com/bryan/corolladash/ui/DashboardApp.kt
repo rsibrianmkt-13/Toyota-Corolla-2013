@@ -85,6 +85,7 @@ import com.bryan.corolladash.ui.screens.MapActions
 import com.bryan.corolladash.ui.screens.HomeScreen
 import com.bryan.corolladash.ui.screens.MusicActions
 import com.bryan.corolladash.ui.screens.MusicScreen
+import com.bryan.corolladash.ui.screens.MusicBackdrop
 import com.bryan.corolladash.ui.screens.QuickActions
 import com.bryan.corolladash.ui.screens.QuickSettingsPanel
 import com.bryan.corolladash.ui.screens.RestMode
@@ -128,6 +129,15 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
     val weather by c.weather.state.collectAsStateWithLifecycle()
     val odometerKm by c.odometer.km.collectAsStateWithLifecycle()
     val fills by c.fuel.fills.collectAsStateWithLifecycle()
+    val trip by c.odometer.trip.collectAsStateWithLifecycle()
+    LaunchedEffect(resumeTick) { c.odometer.refreshTrip() }
+    // Parte del tanque usada desde la última recarga = km recorridos ÷ (km/gal promedio × 13.2 gal del Corolla 2013).
+    val tankUsed = remember(fills, (odometerKm * 2).toInt()) {
+        val st = c.fuel.stats(odometerKm)
+        val avg = st.averageKmPerGallon
+        val since = st.kmSinceLastFill
+        if (avg != null && avg > 0 && since != null) (since / (avg * TANK_GALLONS)).toFloat().coerceIn(0f, 1f) else null
+    }
     val phoneName by c.status.phoneName.collectAsStateWithLifecycle()
     val destination by c.nav.destination.collectAsStateWithLifecycle()
     val route by c.nav.route.collectAsStateWithLifecycle()
@@ -296,7 +306,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
 
     val musicActions = remember {
         MusicActions(
-            playPause = c.media::playPause,
+            playPause = c::playPause,
             next = c.media::next,
             previous = c.media::previous,
             seekTo = c.media::seekTo,
@@ -376,6 +386,8 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
                 .fillMaxSize()
                 .then(if (bgBlur > 0.dp) Modifier.blur(bgBlur, BlurredEdgeTreatment.Rectangle) else Modifier)
         ) {
+        // Pantalla Música: fondo con los colores de la carátula, muy difuminado.
+        if (section.value == Section.MUSIC && media.title != null) MusicBackdrop(media.art, Modifier.fillMaxSize())
         // En la página de letra solo queda el menú lateral.
         if (!lyricsPageOpen) {
             TopBar(
@@ -415,6 +427,8 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
                     driving = moving,
                     destination = destination,
                     route = route,
+                    trip = trip,
+                    tankUsed = tankUsed,
                     music = musicActions,
                     a = homeActions,
                 )
@@ -432,6 +446,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
                             lyricsEnabled = lyricsEnabled,
                             driving = moving,
                             onLyricsOpened = { c.lyrics.retry() },
+                            phoneName = phoneName,
                         )
                         Section.APPS -> AppsScreen(
                             system = systemTiles,
@@ -747,22 +762,21 @@ private fun buildDiagnostics(c: AppContainer, hasLocation: Boolean, hasBtPerm: B
 
 // ---------------------------------------------------------------- Barra lateral
 
-/* x22 y45 93×635; botones 76×78 con centros en y 88/184/280/376/472/568 (relativos a la barra). */
+/* Barra de alto completo: x0 y0 118×720, línea fina a la derecha; botones 76×78 con centros en y 133/229/325/421/517/613. */
 @Composable
 private fun Sidebar(current: Section, onSelect: (Section) -> Unit, onPhone: () -> Unit, onAndroidAuto: () -> Unit) {
     Box(
         Modifier
-            .at(22, 45, 93, 635)
-            .clip(RoundedCornerShape(30.dp))
-            .background(Brush.verticalGradient(listOf(Color(0xFF0E0F11), Color(0xFF0A0B0D))))
-            .border(1.dp, Dash.Border, RoundedCornerShape(30.dp))
+            .at(0, 0, 118, 720)
+            .background(Brush.verticalGradient(listOf(Color(0xFF0C0D0F), Color(0xFF08090B))))
     ) {
-        SideItem(DashIcons.Home, current == Section.HOME, 88, "Inicio") { onSelect(Section.HOME) }
-        SideItem(DashIcons.Music, current == Section.MUSIC, 184, "Música") { onSelect(Section.MUSIC) }
-        SideItem(DashIcons.PhoneFill, false, 280, "Teléfono", onPhone)
-        SideItem(DashIcons.AaFill, false, 376, "Android Auto", onAndroidAuto)
-        SideItem(DashIcons.Grid, current == Section.APPS, 472, "Aplicaciones") { onSelect(Section.APPS) }
-        SideItem(DashIcons.Gear, current == Section.SETTINGS, 568, "Ajustes") { onSelect(Section.SETTINGS) }
+        Box(Modifier.at(117, 0, 1, 720).background(Dash.Border))
+        SideItem(DashIcons.Home, current == Section.HOME, 133, "Inicio") { onSelect(Section.HOME) }
+        SideItem(DashIcons.Music, current == Section.MUSIC, 229, "Música") { onSelect(Section.MUSIC) }
+        SideItem(DashIcons.PhoneFill, false, 325, "Teléfono", onPhone)
+        SideItem(DashIcons.AaFill, false, 421, "Android Auto", onAndroidAuto)
+        SideItem(DashIcons.Grid, current == Section.APPS, 517, "Aplicaciones") { onSelect(Section.APPS) }
+        SideItem(DashIcons.Gear, current == Section.SETTINGS, 613, "Ajustes") { onSelect(Section.SETTINGS) }
     }
 }
 
@@ -771,7 +785,7 @@ private fun SideItem(icon: ImageVector, active: Boolean, centerY: Int, label: St
     val shape = RoundedCornerShape(20.dp)
     Box(
         Modifier
-            .at(8, centerY - 39, 76, 78)
+            .at(21, centerY - 39, 76, 78)
             .clip(shape)
             .background(if (active) Dash.Selected else Color.Transparent)
             .border(1.dp, if (active) Dash.SelectedBorder else Color.Transparent, shape)
@@ -876,3 +890,6 @@ private fun TopBar(
         if (!btOn && !wifiOn) Icon(DashIcons.More, "Centro de control", Modifier.size(28.dp), tint = Dash.Icon2)
     }
 }
+
+/** Tanque del Toyota Corolla 2013: 13.2 galones (50 L). */
+private const val TANK_GALLONS = 13.2

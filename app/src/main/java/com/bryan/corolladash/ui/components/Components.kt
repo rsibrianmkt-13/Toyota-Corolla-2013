@@ -33,16 +33,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -70,11 +63,7 @@ fun FixedDesignCanvas(content: @Composable BoxScope.() -> Unit) {
                 Modifier
                     .size(1280.dp, 720.dp)
                     .clipToBounds()
-                    .background(Dash.Bg)
-                    .drawWithCache {
-                        val backdrop = Backdrop()
-                        onDrawBehind { drawBackdrop(backdrop) }
-                    },
+                    .background(Dash.Bg),
                 content = content,
             )
         }
@@ -173,13 +162,12 @@ fun rememberNowMillis(key: Any? = null): Long {
     return now
 }
 
-/** Hora "HH:mm" y fecha "Mar, 27 de octubre" en español. */
+/** Hora "HH:mm" y fecha corta "28 oct". */
 fun clockStrings(now: Long): Pair<String, String> {
     val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
-    val days = listOf("Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb")
-    val months = listOf("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+    val months = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
     return "%02d:%02d".format(cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE)) to
-        "${days[cal.get(java.util.Calendar.DAY_OF_WEEK) - 1]}, ${cal.get(java.util.Calendar.DAY_OF_MONTH)} de ${months[cal.get(java.util.Calendar.MONTH)]}"
+        "${cal.get(java.util.Calendar.DAY_OF_MONTH)} ${months[cal.get(java.util.Calendar.MONTH)]}"
 }
 
 /**
@@ -202,24 +190,4 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
-}
-
-/** Rutas y degradado del fondo: se crean una vez por tamaño (drawWithCache), no en cada cuadro. */
-private class Backdrop {
-    val m1 = PathParser().parsePathString(
-        "M0 0H1280V40C1180 70 1120 30 1040 46 960 62 900 20 800 30 720 38 660 8 560 26 470 42 420 70 300 52 200 38 120 62 0 44z"
-    ).toPath()
-    val m2 = PathParser().parsePathString(
-        "M300 0H980C930 26 880 18 830 22 760 26 700 6 620 16 540 26 470 40 400 28 360 22 330 10 300 0z"
-    ).toPath()
-    val glow = Brush.radialGradient(listOf(Color(0x08FFFFFF), Color.Transparent), center = Offset(620f, -80f), radius = 760f)
-}
-
-/** Fondo: casi negro, con una silueta de montañas gris muy tenue arriba. Nada de azul. */
-private fun DrawScope.drawBackdrop(b: Backdrop) {
-    scale(size.width / 1280f, size.height / 720f, pivot = Offset.Zero) {
-        drawRect(b.glow, size = Size(1280f, 720f))
-        drawPath(b.m1, Color(0xFF141518), alpha = 0.45f)
-        drawPath(b.m2, Color(0xFF18191C), alpha = 0.30f)
-    }
 }

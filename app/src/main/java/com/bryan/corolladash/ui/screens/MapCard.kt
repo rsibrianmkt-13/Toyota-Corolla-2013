@@ -76,6 +76,8 @@ fun MapCard(
     modifier: Modifier,
     width: Int = 363,
     height: Int = 469,
+    /** Cuadro pequeño (decorativo): sin encabezado ni botón "Ir", solo la calle o el destino. */
+    compact: Boolean = false,
 ) {
     val lat = speed.latitude
     val lon = speed.longitude
@@ -105,6 +107,16 @@ fun MapCard(
                 24, height / 2 - 10, DashType.Label.copy(color = Dash.Text2),
             )
         }
+
+        if (compact) {
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(70.dp)
+                    .background(Brush.verticalGradient(0f to Color.Transparent, 0.6f to MapBg, 1f to MapBg))
+            )
+            Box(Modifier.fillMaxSize().clickable(onClickLabel = "Abrir mapa", onClick = onOpenMap))
+            val label = destination?.name ?: if (lat != null && lon != null) rememberStreetName(lat, lon) else null
+            label?.let { TextAt(it, 16, height - 30, DashType.Label.copy(fontSize = 14.sp, color = Color(0xFF8E8E93)), maxWidth = (width - 32).dp) }
+        } else {
 
         // Degradados arriba/abajo para integrar con la tarjeta.
         Box(Modifier.fillMaxWidth().height(110.dp).background(Brush.verticalGradient(listOf(MapBg, Color.Transparent))))
@@ -147,6 +159,7 @@ fun MapCard(
                 else -> "Toca para elegir destino"
             }
             TextAt(bottom, 24, height - 46, DashType.Label.copy(fontSize = 16.sp, color = Dash.TextReadable), maxWidth = (width - 48).dp)
+        }
         }
     }
 }

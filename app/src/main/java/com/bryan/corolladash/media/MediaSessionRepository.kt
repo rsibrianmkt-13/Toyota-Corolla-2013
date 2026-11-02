@@ -11,6 +11,7 @@ import android.graphics.drawable.Icon
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
+import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.net.Uri
@@ -27,6 +28,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.bryan.corolladash.settings.AppConfig
+import com.bryan.corolladash.lyrics.SongIdentity
 import com.bryan.corolladash.settings.ExternalApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +73,10 @@ data class MediaState(
     val repeatSupported: Boolean = false,
     /** PlaybackStateCompat.REPEAT_MODE_NONE / ONE / ALL. */
     val repeatMode: Int = PlaybackStateCompat.REPEAT_MODE_NONE,
+    /** Próximas canciones, si el reproductor comparte su cola (por Bluetooth no siempre llega). */
+    val upNext: List<SongLine> = emptyList(),
+    /** Últimas canciones que sonaron (las guarda esta app). */
+    val recent: List<SongLine> = emptyList(),
 ) {
     val canSeek: Boolean get() = actions and PlaybackState.ACTION_SEEK_TO != 0L && durationMs > 0
 
@@ -80,6 +86,10 @@ data class MediaState(
         return if (durationMs > 0) p.coerceIn(0, durationMs) else p.coerceAtLeast(0)
     }
 }
+
+/** Una canción de la lista (siguientes o escuchadas antes). */
+@androidx.compose.runtime.Immutable
+data class SongLine(val title: String, val artist: String?)
 
 /** Una sesión activa tal como la ve Android (para la pantalla de diagnóstico). */
 data class SessionInfo(
@@ -134,6 +144,10 @@ class MediaSessionRepository(
     private var artTriedAt = 0L
     private val online = OnlineArt(context)
 
+    // Historial de esta sesión de uso: canción anterior al cambiar de pista (máx. 6).
+    private var lastSong: SongLine? = null
+    private val history = ArrayDeque<SongLine>()
+
     /** Origen del último intento en línea (Diagnóstico). */
     val onlineArtResult: String? get() = online.lastResult
 
@@ -147,6 +161,7 @@ class MediaSessionRepository(
             if (state?.state == PlaybackState.STATE_PLAYING) refresh() else publish()
         }
         override fun onSessionDestroyed() = refresh()
+        override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) = publish()
     }
 
     private val compatCallback = object : MediaControllerCompat.Callback() {
@@ -238,6 +253,7 @@ class MediaSessionRepository(
             ?: md.text(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
 
         updateArt(c, md, title, artist)
+        if (title != null) trackHistory(SongLine(title, artist))
 
         val actions = pb?.actions ?: 0L
         val cShuffle = runCatching { compat?.shuffleMode }.getOrNull() ?: PlaybackStateCompat.SHUFFLE_MODE_INVALID
@@ -271,8 +287,37 @@ class MediaSessionRepository(
                 PlaybackStateCompat.REPEAT_MODE_GROUP -> PlaybackStateCompat.REPEAT_MODE_ALL
                 else -> r
             },
+            upNext = upNextOf(c, pb, title),
+            recent = history.filter { it.title != title }.take(3),
         )
     }
+
+    private fun trackHistory(song: SongLine) {
+        val prev = lastSong
+        if (prev != null && !sameSong(prev, song)) {
+            history.removeAll { sameSong(it, prev) }
+            history.addFirst(prev)
+            while (history.size > 6) history.removeLast()
+        }
+        lastSong = song
+    }
+
+    private fun sameSong(a: SongLine, b: SongLine) =
+        SongIdentity.normalize(a.title) == SongIdentity.normalize(b.title) &&
+            SongIdentity.normalize(a.artist.orEmpty()) == SongIdentity.normalize(b.artist.orEmpty())
+
+    /** Hasta 3 canciones después de la actual en la cola del reproductor. */
+    private fun upNextOf(c: MediaController, pb: PlaybackState?, title: String?): List<SongLine> = runCatching {
+        val q = c.queue ?: return emptyList()
+        if (q.isEmpty()) return emptyList()
+        val active = pb?.activeQueueItemId ?: MediaSession.QueueItem.UNKNOWN_ID.toLong()
+        var i = q.indexOfFirst { it.queueId == active }
+        if (i < 0 && title != null) i = q.indexOfFirst { it.description.title?.toString() == title }
+        q.drop(i + 1).take(3).mapNotNull { item ->
+            val t = item.description.title?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            SongLine(t, item.description.subtitle?.toString()?.takeIf { it.isNotBlank() })
+        }
+    }.getOrDefault(emptyList())
 
     // ------------------------------------------------------------------ Origen de la música
 
@@ -494,6 +539,17 @@ class MediaSessionRepository(
     }
 
     /** Fallback: tecla multimedia estándar. La recibe la app que tenga el foco de audio. */
+    /** Tecla multimedia enviada directamente a una app (despierta su receptor aunque no tenga sesión activa). */
+    fun sendMediaButtonTo(pkg: String, code: Int) {
+        for (action in intArrayOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+            val i = android.content.Intent(android.content.Intent.ACTION_MEDIA_BUTTON)
+                .setPackage(pkg)
+                .putExtra(android.content.Intent.EXTRA_KEY_EVENT, KeyEvent(action, code))
+            runCatching { context.sendBroadcast(i) }
+        }
+        main.postDelayed({ refresh() }, 1_000)
+    }
+
     private fun sendKey(code: Int) {
         val a = audio ?: return
         a.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))

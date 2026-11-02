@@ -1,6 +1,12 @@
 package com.bryan.corolladash.ui.screens
 
 import android.os.SystemClock
+import android.os.Build
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -65,8 +71,6 @@ import androidx.compose.ui.unit.sp
 import android.support.v4.media.session.PlaybackStateCompat
 import com.bryan.corolladash.lyrics.LyricsState
 import com.bryan.corolladash.media.MediaState
-import com.bryan.corolladash.ui.music.LyricsBottomSheet
-import com.bryan.corolladash.ui.music.LyricsScreen
 import com.bryan.corolladash.ui.music.LyricsPage
 import com.bryan.corolladash.ui.components.CircleButton
 import com.bryan.corolladash.ui.components.DashCard
@@ -147,35 +151,53 @@ fun HomeMusicCard(
     val swipe = rememberSwipe()
     val volume = rememberVolumeHud()
     val (source, sub) = sourceLines(m, phoneName)
+    val w = HOME_MUSIC_W
     DashCard(modifier.trackSwipe(enabled, swipe, actions).holdForVolume(volume, actions), onClick = onOpen) {
         Box(Modifier.fillMaxSize().background(MusicCardBg))
-        // Encabezado: reproductor de origen y teléfono (tarjeta 363×469 del Inicio)
-        Box(Modifier.at(24, 24, 40, 40).clip(CircleShape).background(Dash.Well), contentAlignment = Alignment.Center) {
-            DashIcon(DashIcons.Bt, 22, Dash.Icon)
+        // Encabezado: reproductor de origen · teléfono (tarjeta 526×490 del Inicio)
+        Box(Modifier.at(22, 20, 36, 36).clip(CircleShape).background(Dash.Well), contentAlignment = Alignment.Center) {
+            DashIcon(DashIcons.Bt, 18, Dash.Icon)
         }
-        if (sub != null) {
-            TextAt(source, 76, 26, DashType.Body.copy(fontSize = 18.sp, color = Dash.Text), maxWidth = 263.dp)
-            TextAt(sub, 76, 49, DashType.Footnote.copy(fontSize = 13.sp, color = Color(0xFF8E8E93)), maxWidth = 263.dp)
-        } else {
-            TextAt(source, 76, 36, DashType.Label.copy(fontSize = 18.sp), maxWidth = 263.dp)
+        Row(Modifier.offset(70.dp, 28.dp).width((w - 92).dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(source, style = DashType.Label.copy(fontSize = 17.sp, color = Dash.TextReadable), maxLines = 1)
+            sub?.let { Text(" · $it", style = DashType.Label.copy(fontSize = 17.sp, color = Color(0xFF8E8E93)), maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
 
         // Carátula y textos acompañan el dedo al deslizar.
         Box(Modifier.fillMaxSize().swipeFollow(swipe)) {
-            Artwork(m.art, Modifier.at(24, 80, 124, 124), radius = 14)
+            Artwork(m.art, Modifier.at(22, 74, 140, 140), radius = 18)
             if (st == MusicStatus.PLAYING) {
-                TextAt(m.title.orEmpty(), 166, 104, DashType.Headline.copy(fontSize = 22.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.3).sp), maxWidth = 173.dp)
-                m.artist?.let { TextAt(it, 166, 136, DashType.Label.copy(fontSize = 16.sp, color = Dash.TextReadable), maxWidth = 173.dp) }
-                if (m.durationMs > 0) Progress(m, x = 24, y = 276, w = 315, seekable = false, onSeek = {})
+                TextAt(m.title.orEmpty(), 182, 92, DashType.Headline.copy(fontSize = 24.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.3).sp), maxWidth = 322.dp)
+                m.artist?.let { TextAt(it, 182, 126, DashType.Label.copy(fontSize = 18.sp, color = Dash.TextReadable), maxWidth = 322.dp) }
+                if (m.durationMs > 0) Progress(m, x = 182, y = 174, w = 322, seekable = false, onSeek = {}, small = true)
             } else {
-                CompactEmptyText(st, actions, Modifier.offset(166.dp, 88.dp).width(173.dp))
+                CompactEmptyText(st, actions, Modifier.offset(182.dp, 84.dp).width(322.dp))
             }
         }
 
-        Controls(m, actions, centerX = 181, centerY = 385, playSize = 88, enabled = enabled, side = 64, gap = 104)
+        Controls(m, actions, centerX = w / 2, centerY = 268, playSize = 80, enabled = enabled, side = 64, gap = 120)
+
+        // Abajo: próximas canciones (si el reproductor comparte su cola) o las escuchadas antes.
+        val list = m.upNext.ifEmpty { m.recent }
+        if (st == MusicStatus.PLAYING && list.isNotEmpty()) {
+            Box(Modifier.at(22, 326, w - 44, 1).background(Dash.Border))
+            TextAt(if (m.upNext.isNotEmpty()) "A continuación" else "Escuchadas antes", 22, 344, QueueLabel)
+            list.forEachIndexed { i, song ->
+                Row(Modifier.offset(22.dp, (378 + i * 34).dp).width((w - 44).dp)) {
+                    Text(song.title, style = QueueTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    song.artist?.let { Text(" · $it", style = QueueArtist, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                }
+            }
+        }
         VolumeHud(volume, Modifier.align(Alignment.Center))
     }
 }
+
+/** Ancho de la tarjeta de música del Inicio. */
+const val HOME_MUSIC_W = 526
+private val QueueLabel = DashType.Label.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xB38E8E93))
+private val QueueTitle = DashType.Label.copy(fontSize = 17.sp, fontWeight = FontWeight.Light, color = Color(0x8CC7C7CC))
+private val QueueArtist = DashType.Label.copy(fontSize = 17.sp, fontWeight = FontWeight.Light, color = Color(0x738E8E93))
 
 /**
  * Música de la vista limpia del Inicio (495×469): sin tarjeta ni carátula, integrada al fondo.
@@ -223,7 +245,7 @@ fun CleanMusicPanel(
 }
 
 /**
- * Música compacta de la vista limpia (290×300): el carro domina la escena y la música queda a un lado,
+ * Música compacta de la vista limpia (320×300): el carro domina la escena y la música queda a un lado,
  * sin tarjeta ni carátula. Mismos gestos que las otras vistas.
  */
 @Composable
@@ -240,7 +262,7 @@ fun CompactCleanMusicPanel(
     val swipe = rememberSwipe()
     val volume = rememberVolumeHud()
     val (source, sub) = sourceLines(m, phoneName)
-    val w = 290
+    val w = 320
     Box(
         modifier
             .trackSwipe(enabled, swipe, actions)
@@ -265,16 +287,17 @@ fun CompactCleanMusicPanel(
                 EmptyText(st, x = 0, y = 36, w = w, actions = actions)
             }
         }
-        Controls(m, actions, centerX = 104, centerY = 222, playSize = 64, enabled = enabled, side = 52, gap = 84)
+        Controls(m, actions, centerX = 120, centerY = 222, playSize = 68, enabled = enabled, side = 56, gap = 92)
         VolumeHud(volume, Modifier.align(Alignment.Center))
     }
 }
 
 // ---------------------------------------------------------------- Pantalla completa (1125×571)
 
-/** Vista de la pantalla Música: reproductor, hoja de letra (desde abajo) o letra a pantalla completa. */
-enum class MusicView { NOW_PLAYING, SHEET, LYRICS }
-
+/**
+ * Pantalla Música (1125×571, sin tarjeta): con carátula → carátula grande a la izquierda;
+ * sin carátula → solo texto, más grande. Deslizar hacia arriba (o tocar el aviso) abre la letra en grande.
+ */
 @Composable
 fun MusicScreen(
     m: MediaState,
@@ -284,122 +307,148 @@ fun MusicScreen(
     lyricsEnabled: Boolean,
     driving: Boolean,
     onLyricsOpened: () -> Unit,
+    phoneName: String? = null,
 ) {
     val st = status(m, phoneConnected)
-    var view by remember { mutableStateOf(MusicView.NOW_PLAYING) }
+    var showLyrics by remember { mutableStateOf(false) }
     val canLyrics = lyricsEnabled && st == MusicStatus.PLAYING
-    LaunchedEffect(canLyrics) { if (!canLyrics) view = MusicView.NOW_PLAYING }
-    // Atrás: letra completa / hoja → reproductor.
-    BackHandler(enabled = view != MusicView.NOW_PLAYING) { view = MusicView.NOW_PLAYING }
-    fun openLyrics(v: MusicView) {
-        view = v
-        onLyricsOpened()
-    }
+    LaunchedEffect(canLyrics) { if (!canLyrics) showLyrics = false }
+    BackHandler(enabled = showLyrics) { showLyrics = false }
 
-    Box(Modifier.fillMaxSize()) {
-        AnimatedContent(
-            view == MusicView.LYRICS,
-            transitionSpec = {
-                (fadeIn(tween(260)) + slideInVertically(tween(300)) { it / 6 }) togetherWith fadeOut(tween(180))
-            },
-            label = "lyrics",
-        ) { full ->
-            if (full) {
-                BigLyricsScreen(m, lyrics, driving, actions, onClose = { view = MusicView.NOW_PLAYING })
-            } else {
-                NowPlaying(
-                    m, st, actions,
-                    canLyrics = canLyrics,
-                    dimmed = view == MusicView.SHEET,
-                    onLyrics = {
-                        if (view == MusicView.NOW_PLAYING) {
-                            openLyrics(MusicView.LYRICS)
-                        } else {
-                            view = MusicView.NOW_PLAYING
-                        }
-                    },
-                    onSwipeUp = { openLyrics(MusicView.SHEET) },
-                    onSwipeRight = { openLyrics(MusicView.LYRICS) },
-                )
+    AnimatedContent(
+        showLyrics,
+        transitionSpec = {
+            (fadeIn(tween(260)) + slideInVertically(tween(300)) { if (targetState) it / 6 else -it / 6 }) togetherWith fadeOut(tween(180))
+        },
+        label = "lyrics",
+        modifier = Modifier.fillMaxSize(),
+    ) { full ->
+        if (full) {
+            BigLyricsScreen(m, lyrics, driving, actions, onClose = { showLyrics = false })
+        } else {
+            NowPlaying(m, phoneName, st, actions, canLyrics) {
+                showLyrics = true
+                onLyricsOpened()
             }
-        }
-        AnimatedVisibility(
-            view == MusicView.SHEET,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically(tween(300)) { it } + fadeIn(tween(200)),
-            exit = slideOutVertically(tween(240)) { it } + fadeOut(tween(200)),
-        ) {
-            LyricsBottomSheet(
-                m, lyrics,
-                onClose = { view = MusicView.NOW_PLAYING },
-                onExpand = { view = MusicView.LYRICS },
-            )
         }
     }
 }
 
 @Composable
-private fun NowPlaying(
-    m: MediaState,
-    st: MusicStatus,
-    actions: MusicActions,
-    canLyrics: Boolean,
-    dimmed: Boolean,
-    onLyrics: () -> Unit,
-    onSwipeUp: () -> Unit,
-    onSwipeRight: () -> Unit,
-) {
+private fun NowPlaying(m: MediaState, phoneName: String?, st: MusicStatus, actions: MusicActions, canLyrics: Boolean, onLyrics: () -> Unit) {
     val enabled = st == MusicStatus.PLAYING || st == MusicStatus.IDLE
     val swipe = rememberSwipe()
-    val up by rememberUpdatedState(onSwipeUp)
-    val right by rememberUpdatedState(onSwipeRight)
-    val dim by animateFloatAsState(if (dimmed) 0.35f else 1f, tween(250), label = "dim")
     val volume = rememberVolumeHud()
-    val x = 456
-    val w = 620
-    DashCard(
+    val withArt = m.art != null && st == MusicStatus.PLAYING
+    Box(
         Modifier
             .fillMaxSize()
-            .graphicsLayer { alpha = dim }
-            // Deslizar a la derecha abre la letra en grande (si hay letra); a la izquierda, siguiente canción.
-            .trackSwipe(enabled, swipe, actions, onRight = if (canLyrics) ({ right() }) else null)
-            .swipeUpToOpen(canLyrics) { up() }
+            .trackSwipe(enabled, swipe, actions)
+            .swipeUpToOpen(canLyrics, onLyrics)
             .holdForVolume(volume, actions)
     ) {
-        TextAt("Música Bluetooth", 44, 38, DashType.Label.copy(fontSize = 18.sp))
-        if (canLyrics) LyricsButton(Modifier.offset((1125 - 44 - 124).dp, 24.dp), onLyrics)
-
+        val cx = if (withArt) 507 + 280 else 67 + 490
+        val cy = if (withArt) 420 else 445
+        val (source, sub) = sourceLines(m, phoneName)
         Box(Modifier.fillMaxSize().swipeFollow(swipe)) {
-            Artwork(m.art, Modifier.at(44, 96, 360, 360), radius = 22)
-
-            if (st == MusicStatus.PLAYING) {
-                TextAt(m.title.orEmpty(), x, 150, DashType.LargeTitle.copy(fontWeight = FontWeight.SemiBold), maxWidth = w.dp)
-                m.artist?.let { TextAt(it, x, 198, DashType.Body.copy(fontSize = 23.sp, color = Dash.TextReadable), maxWidth = w.dp) }
-                m.album?.takeIf { it != m.title }?.let { TextAt(it, x, 234, DashType.Label.copy(fontSize = 18.sp), maxWidth = w.dp) }
-                if (m.durationMs > 0) Progress(m, x = x, y = 286, w = w, seekable = m.canSeek, onSeek = actions.seekTo)
+            if (withArt) {
+                Artwork(m.art, Modifier.at(57, 50, 380, 380), radius = 24)
+                val x = 507
+                val w = 560
+                SourceRow(source, sub, Modifier.offset(x.dp, 96.dp))
+                TextAt(m.title.orEmpty(), x, 136, DashType.LargeTitle.copy(fontSize = 44.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-1).sp), maxWidth = w.dp)
+                m.artist?.let { TextAt(it, x, 194, DashType.Body.copy(fontSize = 24.sp, color = Dash.TextReadable), maxWidth = w.dp) }
+                m.album?.takeIf { it != m.title }?.let { TextAt(it, x, 230, DashType.Label.copy(fontSize = 18.sp, color = Dash.Text3), maxWidth = w.dp) }
+                if (m.durationMs > 0) Progress(m, x = x, y = 312, w = w, seekable = m.canSeek, onSeek = actions.seekTo)
             } else {
-                EmptyText(st, x = x, y = 160, w = w, actions = actions, large = true)
+                val x = 67
+                val w = 980
+                // Sin carátula: solo un icono pequeño y tenue, el texto manda.
+                Box(
+                    Modifier.at(x, 50, 64, 64).clip(RoundedCornerShape(18.dp)).border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp)),
+                    contentAlignment = Alignment.Center,
+                ) { DashIcon(DashIcons.Music, 28, Color(0x59EBEBF0)) }
+                SourceRow(source, sub, Modifier.offset((x + 84).dp, 72.dp))
+                if (st == MusicStatus.PLAYING) {
+                    TextAt(m.title.orEmpty(), x, 150, DashType.LargeTitle.copy(fontSize = 54.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-1.4).sp), maxWidth = w.dp)
+                    m.artist?.let { TextAt(it, x, 220, DashType.Body.copy(fontSize = 26.sp, color = Dash.TextReadable), maxWidth = w.dp) }
+                    m.album?.takeIf { it != m.title }?.let { TextAt(it, x, 258, DashType.Label.copy(fontSize = 18.sp, color = Dash.Text3), maxWidth = w.dp) }
+                    if (m.durationMs > 0) Progress(m, x = x, y = 332, w = w, seekable = m.canSeek, onSeek = actions.seekTo)
+                } else {
+                    EmptyText(st, x = x, y = 160, w = w, actions = actions, large = true)
+                }
             }
         }
-
-        val cx = x + w / 2
-        Controls(m, actions, centerX = cx, centerY = 410, playSize = 116, enabled = enabled)
+        Controls(m, actions, centerX = cx, centerY = cy, playSize = 96, enabled = enabled, side = 72, gap = 130)
         if (enabled && m.shuffleSupported) {
             ModeButton(
                 DashIcons.Shuffle, "Aleatorio", on = m.shuffleOn,
-                Modifier.offset((cx - 290 - 32).dp, (410 - 32).dp), onClick = actions.toggleShuffle,
+                Modifier.offset((cx - 250 - 32).dp, (cy - 32).dp), onClick = actions.toggleShuffle,
             )
         }
         if (enabled && m.repeatSupported) {
             ModeButton(
                 if (m.repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE) DashIcons.RepeatOne else DashIcons.Repeat,
                 "Repetir", on = m.repeatMode != PlaybackStateCompat.REPEAT_MODE_NONE,
-                Modifier.offset((cx + 290 - 32).dp, (410 - 32).dp), onClick = actions.cycleRepeat,
+                Modifier.offset((cx + 250 - 32).dp, (cy - 32).dp), onClick = actions.cycleRepeat,
             )
+        }
+        if (canLyrics) {
+            Row(
+                Modifier.offset((cx - 170).dp, 536.dp).size(340.dp, 32.dp).clip(RoundedCornerShape(16.dp))
+                    .clickable(onClickLabel = "Ver letra", onClick = onLyrics),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DashIcon(DashIcons.ChevU, 16, HintColor)
+                Spacer(Modifier.width(8.dp))
+                Text("Desliza hacia arriba para ver la letra", style = DashType.Footnote.copy(fontSize = 14.sp, color = HintColor), maxLines = 1)
+            }
         }
         VolumeHud(volume, Modifier.align(Alignment.Center))
     }
 }
+
+private val HintColor = Color(0x998E8E93)
+
+/** "Spotify · iPhone de Bryan" con el icono de Bluetooth. */
+@Composable
+private fun SourceRow(source: String, sub: String?, modifier: Modifier) {
+    Row(modifier.width(560.dp), verticalAlignment = Alignment.CenterVertically) {
+        DashIcon(DashIcons.Bt, 17, Color(0xFF8E8E93))
+        Spacer(Modifier.width(10.dp))
+        Text(source, style = DashType.Label.copy(fontSize = 16.sp, color = Dash.TextReadable), maxLines = 1)
+        sub?.let { Text(" · $it", style = DashType.Label.copy(fontSize = 16.sp, color = Color(0xFF8E8E93)), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    }
+}
+
+/**
+ * Fondo de la pantalla Música: los colores de la carátula, muy difuminados y tenues.
+ * Se reduce la carátula a 12×12 px y se estira con filtrado suave (casi sin costo); en Android 12+ además se difumina.
+ */
+@Composable
+internal fun MusicBackdrop(art: ImageBitmap?, modifier: Modifier = Modifier) {
+    Crossfade(art, animationSpec = tween(700), label = "backdrop", modifier = modifier) { a ->
+        if (a != null) {
+            val tiny = remember(a) { tinyOf(a) }
+            Box(Modifier.fillMaxSize()) {
+                Image(
+                    tiny, contentDescription = null, contentScale = ContentScale.Crop, filterQuality = FilterQuality.High,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (Build.VERSION.SDK_INT >= 31) Modifier.blur(48.dp, BlurredEdgeTreatment.Rectangle) else Modifier)
+                        .graphicsLayer { alpha = 0.34f },
+                )
+                Box(Modifier.fillMaxSize().background(Color(0x47030304)))
+            }
+        }
+    }
+}
+
+private fun tinyOf(a: ImageBitmap): ImageBitmap = runCatching {
+    val src = a.asAndroidBitmap().let { if (it.config == android.graphics.Bitmap.Config.HARDWARE) it.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else it }
+    android.graphics.Bitmap.createScaledBitmap(src, 12, 12, true).asImageBitmap()
+}.getOrDefault(a)
 
 /** Aleatorio / repetir: blanco con punto debajo si está activo, gris si no. */
 @Composable
@@ -413,35 +462,14 @@ private fun ModeButton(icon: ImageVector, label: String, on: Boolean, modifier: 
     }
 }
 
-/** Botón "Letra": monocromático, arriba a la derecha del reproductor. */
-@Composable
-private fun LyricsButton(modifier: Modifier, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
-    Row(
-        modifier
-            .size(124.dp, 44.dp)
-            .clip(shape)
-            .background(Dash.Well)
-            .border(1.dp, Dash.Border, shape)
-            .clickable(onClickLabel = "Letra", onClick = onClick),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        DashIcon(DashIcons.Lyrics, 22, Dash.Icon)
-        Spacer(Modifier.width(8.dp))
-        Text("Letra", style = DashType.Label.copy(color = Dash.Text))
-    }
-}
-
-/** Deslizar hacia arriba desde la mitad inferior abre la hoja de letra. */
+/** Deslizar hacia arriba (desde cualquier parte) abre la letra. */
 private fun Modifier.swipeUpToOpen(enabled: Boolean, onUp: () -> Unit): Modifier =
     if (!enabled) this else this.pointerInput(Unit) {
         val threshold = 70.dp.toPx()
-        var startY = 0f
         var total = 0f
         detectVerticalDragGestures(
-            onDragStart = { o -> startY = o.y; total = 0f },
-            onDragEnd = { if (startY > size.height * 0.45f && total <= -threshold) onUp() },
+            onDragStart = { total = 0f },
+            onDragEnd = { if (total <= -threshold) onUp() },
         ) { change, amount ->
             change.consume()
             total += amount
@@ -652,16 +680,16 @@ private fun Controls(
     CircleButton(DashIcons.Prev, "Anterior", side, sideIcon, Modifier.offset((centerX - gap - side / 2).dp, (centerY - side / 2).dp), enabled = enabled, onClick = actions.previous)
     CircleButton(
         if (m.isPlaying) DashIcons.Pause else DashIcons.Play,
-        "Reproducir o pausar", playSize, when { playSize > 110 -> 50; playSize < 80 -> 30; else -> 40 },
+        "Reproducir o pausar", playSize, when { playSize > 90 -> 56; playSize < 76 -> 38; else -> 46 },
         Modifier.offset((centerX - playSize / 2).dp, (centerY - playSize / 2).dp),
-        filled = true, enabled = enabled, onClick = actions.playPause,
+        enabled = enabled, onClick = actions.playPause,
     )
     CircleButton(DashIcons.Next, "Siguiente", side, sideIcon, Modifier.offset((centerX + gap - side / 2).dp, (centerY - side / 2).dp), enabled = enabled, onClick = actions.next)
 }
 
 /** Barra de progreso gris carbón + blanco. Solo avanza mientras se reproduce. */
 @Composable
-internal fun Progress(m: MediaState, x: Int, y: Int, w: Int, seekable: Boolean, onSeek: (Long) -> Unit) {
+internal fun Progress(m: MediaState, x: Int, y: Int, w: Int, seekable: Boolean, onSeek: (Long) -> Unit, small: Boolean = false) {
     val now by produceState(SystemClock.elapsedRealtime(), m.isPlaying, m.positionUpdatedAt) {
         value = SystemClock.elapsedRealtime()
         while (m.isPlaying) { delay(1000); value = SystemClock.elapsedRealtime() }
@@ -686,11 +714,11 @@ internal fun Progress(m: MediaState, x: Int, y: Int, w: Int, seekable: Boolean, 
     }
     Box(Modifier.offset((x + w * f - 5.5f).dp, (y - 3.5f).dp).size(11.dp).clip(CircleShape).background(Dash.Text))
 
-    val t = DashType.Footnote.copy(fontSize = 16.sp, color = Dash.Text2)
-    TextAt(fmt(pos), x, y + 20, t)
+    val t = DashType.Footnote.copy(fontSize = if (small) 13.sp else 16.sp, color = Dash.Text2)
+    TextAt(fmt(pos), x, y + (if (small) 14 else 20), t)
     Text(
         fmt(m.durationMs), style = t.tight(), maxLines = 1, overflow = TextOverflow.Clip, textAlign = TextAlign.End,
-        modifier = Modifier.offset((x + w - 80).dp, (y + 20).dp).width(80.dp),
+        modifier = Modifier.offset((x + w - 80).dp, (y + if (small) 14 else 20).dp).width(80.dp),
     )
 }
 
@@ -738,14 +766,14 @@ internal fun VolumeControl(actions: MusicActions, modifier: Modifier) {
 // ---------------------------------------------------------------- Letra en grande (Música)
 
 /**
- * Letra en grande con carátula pequeña y volumen táctil (1125×571).
- * Se abre deslizando a la derecha en el reproductor o con el botón «Letra»; deslizar a la izquierda o ✕ vuelve.
+ * Letra en grande con carátula pequeña y volumen táctil (1125×571, sin tarjeta).
+ * Se abre deslizando hacia arriba en el reproductor; deslizar hacia abajo, a la izquierda o ✕ vuelve.
  */
 @Composable
 private fun BigLyricsScreen(m: MediaState, lyrics: LyricsState, driving: Boolean, actions: MusicActions, onClose: () -> Unit) {
     val close by rememberUpdatedState(onClose)
     val volume = rememberVolumeHud()
-    DashCard(
+    Box(
         Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
@@ -756,22 +784,30 @@ private fun BigLyricsScreen(m: MediaState, lyrics: LyricsState, driving: Boolean
                     onDragEnd = { if (total <= -threshold) close() },
                 ) { change, amount -> change.consume(); total += amount }
             }
+            .pointerInput(Unit) {
+                val threshold = 80.dp.toPx()
+                var total = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { total = 0f },
+                    onDragEnd = { if (total >= threshold) close() },
+                ) { change, amount -> change.consume(); total += amount }
+            }
             .holdForVolume(volume, actions)
     ) {
         // Carátula en cuadrito + título y artista.
-        Artwork(m.art, Modifier.at(32, 28, 72, 72), radius = 12)
-        TextAt(m.title.orEmpty(), 122, 36, DashType.Title.copy(fontSize = 22.sp), maxWidth = 780.dp)
-        m.artist?.let { TextAt(it, 122, 66, DashType.Label.copy(fontSize = 17.sp, color = Dash.TextReadable), maxWidth = 780.dp) }
+        Artwork(m.art, Modifier.at(32, 12, 72, 72), radius = 14)
+        TextAt(m.title.orEmpty(), 122, 22, DashType.Title.copy(fontSize = 22.sp), maxWidth = 780.dp)
+        m.artist?.let { TextAt(it, 122, 52, DashType.Label.copy(fontSize = 17.sp, color = Dash.TextReadable), maxWidth = 780.dp) }
         Box(
-            Modifier.at(1125 - 32 - 52, 32, 52, 52).clip(CircleShape).background(Dash.Well)
+            Modifier.at(1125 - 32 - 52, 16, 52, 52).clip(CircleShape).background(Dash.Well)
                 .clickable(onClickLabel = "Cerrar letra", onClick = onClose),
             contentAlignment = Alignment.Center,
         ) { DashIcon(DashIcons.X, 22, Dash.Icon) }
 
-        LyricsPage(m, lyrics, driving, Modifier.at(20, 112, 1125 - 140, 380))
-        VolumeControl(actions, Modifier.offset((1125 - 32 - 64).dp, 170.dp))
+        LyricsPage(m, lyrics, driving, Modifier.at(20, 100, 1125 - 140, 400))
+        VolumeControl(actions, Modifier.offset((1125 - 32 - 64).dp, 150.dp))
 
-        if (m.durationMs > 0) Progress(m, x = 60, y = 520, w = 1005, seekable = m.canSeek && !driving, onSeek = actions.seekTo)
+        if (m.durationMs > 0) Progress(m, x = 60, y = 528, w = 1005, seekable = m.canSeek && !driving, onSeek = actions.seekTo)
         VolumeHud(volume, Modifier.align(Alignment.Center))
     }
 }

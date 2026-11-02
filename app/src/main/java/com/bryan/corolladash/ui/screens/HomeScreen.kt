@@ -1,6 +1,19 @@
 package com.bryan.corolladash.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Text
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.text.font.FontWeight
+import com.bryan.corolladash.fuel.Trip
+import com.bryan.corolladash.ui.components.tight
+import java.util.Locale
+import kotlin.math.roundToInt
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -52,10 +65,10 @@ import com.bryan.corolladash.ui.theme.DashType
 
 /*
  * HOME — lienzo 1280×720. Tres vistas que se cambian deslizando (sobre el carro o el mapa) o tocando los puntos:
- *   FULL    Velocidad x133 · Música x514 · Mapa x895, todas 363×469 en y100
- *   CLEAN   una sola escena 1125×469: carro integrado al fondo + música sin tarjeta
+ *   FULL    Velocidad x133 (363) · Música x514 (526) · Mapa x1058 (200×200) + Este viaje (200×272); alto 490 en y100
+ *   CLEAN   una sola escena 1125×490: carro integrado al fondo + música sin tarjeta
  *   LYRICS  solo la letra (sin barra superior ni accesos; el menú lateral se mantiene)
- *   Accesos y587 h66: x133 · x514 (Radio | Música BT) · x895, todos 363 de ancho
+ *   Accesos y618 h58: botones de solo línea, iguales en FULL y CLEAN. Todas las esquinas: 24.
  */
 enum class HomePage { FULL, CLEAN, LYRICS }
 
@@ -73,15 +86,22 @@ class HomeActions(
 )
 
 private const val TOP = 100
-private const val CARD_W = 363
-private const val CARD_H = 469
-private val SpeedText = Color(0xB3F5F5F7)      // 70 %
+private const val CARD_H = 490
+private const val SPEED_X = 133
+private const val SPEED_W = 363
+private const val MUSIC_X = 514
+private const val SIDE_X = 1058
+private const val SIDE_W = 200
+private const val BOTTOM_Y = 618
+private const val BOTTOM_H = 58
+
+private val SpeedText = Color(0xC7F5F5F7)      // 78 %
 private val SpeedLabel = Color(0xB3C7C7CC)
 private val TopShade = Brush.verticalGradient(listOf(Color(0x8C000000), Color.Transparent))
 // Estilos creados una sola vez (no en cada recomposición).
 private val LabelStyle = DashType.Label.copy(fontSize = 16.sp, color = SpeedLabel)
-private val NumberStyle = DashType.Speed.copy(fontSize = 83.sp, lineHeight = 83.sp, letterSpacing = (-2.7).sp, color = SpeedText)
-private val UnitStyle = DashType.Label.copy(fontSize = 23.sp, color = SpeedLabel)
+private val NumberStyle = DashType.Speed.copy(fontSize = 68.sp, lineHeight = 68.sp, fontWeight = FontWeight.Medium, letterSpacing = (-2).sp, color = SpeedText)
+private val UnitStyle = DashType.Label.copy(fontSize = 20.sp, color = SpeedLabel)
 
 @Composable
 fun HomeScreen(
@@ -96,6 +116,8 @@ fun HomeScreen(
     driving: Boolean,
     destination: Place?,
     route: RouteInfo?,
+    trip: Trip,
+    tankUsed: Float?,
     music: MusicActions,
     a: HomeActions,
 ) {
@@ -116,9 +138,10 @@ fun HomeScreen(
             Box(Modifier.fillMaxSize()) {
                 when (p) {
                     HomePage.FULL -> {
-                        SpeedCard(speed.speedKmh, speed.permissionGranted, speed.gpsEnabled, a.requestLocation, a.openFuel, Modifier.at(133, TOP, CARD_W, CARD_H).pageSwipe { go(it) })
-                        HomeMusicCard(media, phoneConnected, phoneName, music, a.openMusic, Modifier.at(514, TOP, CARD_W, CARD_H))
-                        MapCard(speed, destination, route, a.openMap, a.go, Modifier.at(895, TOP, CARD_W, CARD_H).pageSwipe { go(it) })
+                        SpeedCard(speed.speedKmh, speed.permissionGranted, speed.gpsEnabled, a.requestLocation, a.openFuel, Modifier.at(SPEED_X, TOP, SPEED_W, CARD_H).pageSwipe { go(it) })
+                        HomeMusicCard(media, phoneConnected, phoneName, music, a.openMusic, Modifier.at(MUSIC_X, TOP, HOME_MUSIC_W, CARD_H))
+                        MapCard(speed, destination, route, a.openMap, a.go, Modifier.at(SIDE_X, TOP, SIDE_W, SIDE_W).pageSwipe { go(it) }, width = SIDE_W, height = SIDE_W, compact = true)
+                        TripCard(trip, tankUsed, a.openFuel, Modifier.at(SIDE_X, TOP + SIDE_W + 18, SIDE_W, CARD_H - SIDE_W - 18))
                     }
                     HomePage.CLEAN -> CleanScene(speed, media, phoneConnected, phoneName, music, a, onSwipe = { go(it) })
                     HomePage.LYRICS -> Box(Modifier.fillMaxSize()) {
@@ -138,9 +161,19 @@ fun HomeScreen(
                 val i = pages.indexOf(page)
                 onPage(pages[(i + 1) % pages.size])
             })
-            BottomCard(133, "Android Auto", DashIcons.Aa, 26, a.androidAuto)
-            SplitBottomCard(514, "Radio FM", DashIcons.Radio, a.radio, "Música BT", DashIcons.Bt, a.musicBt)
-            BottomCard(895, "Aplicaciones", DashIcons.Grid, 26, a.apps)
+            if (page == HomePage.FULL) {
+                val half = (HOME_MUSIC_W - 12) / 2
+                LineButton(SPEED_X, SPEED_W, "Android Auto", DashIcons.Aa, a.androidAuto)
+                LineButton(MUSIC_X, half, "Radio FM", DashIcons.Radio, a.radio)
+                LineButton(MUSIC_X + half + 12, half, "Música BT", DashIcons.Bt, a.musicBt)
+                LineButton(SIDE_X, SIDE_W, "Apps", DashIcons.Grid, a.apps)
+            } else {
+                val w = (1125 - 36) / 4
+                LineButton(133, w, "Android Auto", DashIcons.Aa, a.androidAuto)
+                LineButton(133 + (w + 12), w, "Radio FM", DashIcons.Radio, a.radio)
+                LineButton(133 + 2 * (w + 12), w, "Música BT", DashIcons.Bt, a.musicBt)
+                LineButton(133 + 3 * (w + 12), w, "Aplicaciones", DashIcons.Grid, a.apps)
+            }
         }
     }
 }
@@ -166,7 +199,7 @@ private fun Modifier.pageSwipe(onPage: (Int) -> Unit): Modifier = pointerInput(U
 @Composable
 private fun PageDots(pages: List<HomePage>, current: HomePage, onTap: () -> Unit) {
     Row(
-        Modifier.offset((133 + 1125 / 2 - 40).dp, 569.dp).size(80.dp, 18.dp)
+        Modifier.offset((133 + 1125 / 2 - 40).dp, 594.dp).size(80.dp, 18.dp)
             .clip(RoundedCornerShape(9.dp)).clickable(onClickLabel = "Cambiar vista", onClick = onTap),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
@@ -182,7 +215,7 @@ private fun PageDots(pages: List<HomePage>, current: HomePage, onTap: () -> Unit
 
 // ---------------------------------------------------------------- Vista completa: Velocidad + Corolla
 
-/** Foto oscura del Corolla a tarjeta completa; velocidad GPS arriba con 70 % de opacidad. */
+/** Foto oscura del Corolla a tarjeta completa; velocidad GPS arriba con barra de nivel. */
 @Composable
 private fun SpeedCard(speedKmh: Int?, permissionGranted: Boolean, gpsEnabled: Boolean, onRequestLocation: () -> Unit, onFuel: () -> Unit, modifier: Modifier) {
     DashCard(modifier, onClick = onFuel) {
@@ -193,27 +226,89 @@ private fun SpeedCard(speedKmh: Int?, permissionGranted: Boolean, gpsEnabled: Bo
             modifier = Modifier.fillMaxSize(),
         )
         Box(Modifier.fillMaxWidth().height(200.dp).background(TopShade))
-        SpeedText(speedKmh, permissionGranted, gpsEnabled, onRequestLocation)
+        SpeedText(speedKmh, permissionGranted, gpsEnabled, onRequestLocation, x = 26, y = 30)
     }
 }
 
-/** Solo recibe la velocidad (no la posición): no se recompone con cada fix GPS si los km/h no cambian. */
+/**
+ * Velocidad: número delgado + "km/h" y una barra de segmentos que se llena con la velocidad (0–140 km/h),
+ * más brillante hacia la punta. Se anima suave al acelerar o frenar.
+ * Solo recibe la velocidad (no la posición): no se recompone con cada fix GPS si los km/h no cambian.
+ */
 @Composable
-private fun SpeedText(speedKmh: Int?, permissionGranted: Boolean, gpsEnabled: Boolean, onRequestLocation: () -> Unit) {
-    TextAt("Velocidad", 30, 38, LabelStyle)
-    if (speedKmh != null) {
-        TextAt(speedKmh.toString(), 27, 56, NumberStyle)
-    } else {
-        TextAt("—", 30, 62, DashType.Speed.copy(fontSize = 68.sp, lineHeight = 68.sp, color = Dash.Text3))
+private fun SpeedText(speedKmh: Int?, permissionGranted: Boolean, gpsEnabled: Boolean, onRequestLocation: () -> Unit, x: Int, y: Int) {
+    TextAt("Velocidad", x, y, LabelStyle)
+    Row(Modifier.offset((x - 3).dp, (y + 22).dp)) {
+        Text(speedKmh?.toString() ?: "—", style = NumberStyle.tight(), modifier = Modifier.alignByBaseline())
+        Spacer(Modifier.width(8.dp))
+        Text("km/h", style = UnitStyle, modifier = Modifier.alignByBaseline())
     }
-    TextAt("km/h", 30, 144, UnitStyle)
+    SpeedBar(speedKmh ?: 0, Modifier.at(x, y + 104, 220, 10))
     when {
         !permissionGranted ->
-            TextAt("Permitir ubicación", 30, 184, DashType.Footnote.copy(color = Dash.Text2), Modifier.clickable(onClick = onRequestLocation))
+            TextAt("Permitir ubicación", x, y + 130, DashType.Footnote.copy(color = Dash.Text2), Modifier.clickable(onClick = onRequestLocation))
         !gpsEnabled ->
-            TextAt("GPS desactivado", 30, 184, DashType.Footnote)
+            TextAt("GPS desactivado", x, y + 130, DashType.Footnote)
     }
 }
+
+@Composable
+private fun SpeedBar(kmh: Int, modifier: Modifier) {
+    val v by animateFloatAsState((kmh / SPEED_MAX).coerceIn(0f, 1f), tween(450), label = "speedBar")
+    Canvas(modifier) {
+        val n = SPEED_SEGMENTS
+        val gap = 3.dp.toPx()
+        val sw = (size.width - gap * (n - 1)) / n
+        val on = v * n
+        for (i in 0 until n) {
+            val lit = i < on
+            val h = if (lit) size.height else size.height * 0.6f
+            val color = if (lit) {
+                val k = (i + 1) / on.coerceAtLeast(1f)
+                Color(0xFFF5F5F7).copy(alpha = (0.18f + 0.72f * k).coerceIn(0f, 0.9f))
+            } else Color(0x12FFFFFF)
+            drawRoundRect(color, topLeft = Offset(i * (sw + gap), size.height - h), size = Size(sw, h), cornerRadius = CornerRadius(2.dp.toPx()))
+        }
+    }
+}
+
+private const val SPEED_MAX = 140f
+private const val SPEED_SEGMENTS = 28
+
+// ---------------------------------------------------------------- Este viaje
+
+/** Km y tiempo en marcha del viaje actual; barra = parte del tanque usada desde la última recarga (si se conoce). */
+@Composable
+private fun TripCard(trip: Trip, tankUsed: Float?, onOpen: () -> Unit, modifier: Modifier) {
+    DashCard(modifier, onClick = onOpen) {
+        Box(Modifier.fillMaxSize().background(Color(0xFF0C0D0E)))
+        TextAt("Este viaje", 20, 22, DashType.Label.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF8E8E93)))
+        Row(Modifier.offset(20.dp, 58.dp)) {
+            Text(String.format(Locale.US, "%.1f", trip.km), style = TripNumber.tight(), modifier = Modifier.alignByBaseline())
+            Spacer(Modifier.width(5.dp))
+            Text("km", style = TripUnit, modifier = Modifier.alignByBaseline())
+        }
+        TextAt("Recorrido", 20, 96, TripLabel)
+        if (tankUsed != null) {
+            Box(Modifier.at(20, 124, 160, 6).clip(RoundedCornerShape(3.dp)).background(Color(0xFF24262A))) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(tankUsed.coerceIn(0f, 1f)).clip(RoundedCornerShape(3.dp)).background(Brush.horizontalGradient(listOf(Color(0xFF9A9AA0), Color(0xFFE7E7EA)))))
+            }
+            TextAt("${(tankUsed * 100).roundToInt()} % del tanque", 20, 140, DashType.Footnote.copy(fontSize = 12.sp))
+        }
+        Box(Modifier.at(20, 170, 160, 1).background(Dash.Border))
+        val min = (trip.movingMs / 60_000L).toInt()
+        Row(Modifier.offset(20.dp, 184.dp)) {
+            Text("%d:%02d".format(min / 60, min % 60), style = TripNumber.tight(), modifier = Modifier.alignByBaseline())
+            Spacer(Modifier.width(5.dp))
+            Text("h", style = TripUnit, modifier = Modifier.alignByBaseline())
+        }
+        TextAt("Manejando", 20, 222, TripLabel)
+    }
+}
+
+private val TripNumber = DashType.Title.copy(fontSize = 28.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.6).sp, color = Color(0xFFE5E5E7))
+private val TripUnit = DashType.Label.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF8E8E93))
+private val TripLabel = DashType.Footnote.copy(fontSize = 14.sp)
 
 // ---------------------------------------------------------------- Vista limpia: una sola escena
 
@@ -228,60 +323,35 @@ private fun CleanScene(
     onSwipe: (Int) -> Unit,
 ) {
     Box(Modifier.at(133, TOP, 1125, CARD_H)) {
-        // Lado izquierdo (carro + velocidad): aquí se desliza para cambiar de vista.
-        Box(Modifier.at(0, 0, 580, CARD_H).pageSwipe(onSwipe)) {
+        // Carro + velocidad: aquí se desliza para cambiar de vista.
+        Box(Modifier.at(0, 0, 750, CARD_H).pageSwipe(onSwipe)) {
             Image(
                 cachedImage(R.drawable.corolla_scene),
                 contentDescription = "Toyota Corolla 2013 azul",
                 contentScale = ContentScale.FillBounds,
-                modifier = Modifier.at(40, 60, 525, 305)
+                modifier = Modifier.at(10, -6, 800, 464)
                     .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null, onClick = a.openFuel),
             )
-            SpeedText(speed.speedKmh, speed.permissionGranted, speed.gpsEnabled, a.requestLocation)
+            SpeedText(speed.speedKmh, speed.permissionGranted, speed.gpsEnabled, a.requestLocation, x = 30, y = 38)
         }
-        CleanMusicPanel(media, phoneConnected, phoneName, music, a.openMusic, Modifier.at(600, 0, 495, CARD_H))
+        // Música compacta a la derecha, más cerca del carro.
+        CompactCleanMusicPanel(media, phoneConnected, phoneName, music, a.openMusic, Modifier.at(770, 140, 320, 300))
     }
 }
 
-// ---------------------------------------------------------------- Accesos inferiores (h66)
-
-private const val BOTTOM_Y = 587
-private const val BOTTOM_H = 66
+// ---------------------------------------------------------------- Accesos inferiores: solo línea
 
 @Composable
-private fun IconWell(icon: ImageVector, size: Int, x: Int) {
-    Box(
-        Modifier.at(x, 11, 44, 44).clip(RoundedCornerShape(13.dp)).background(Dash.Well).border(1.dp, Dash.Border, RoundedCornerShape(13.dp)),
-        contentAlignment = Alignment.Center,
-    ) { DashIcon(icon, size, Dash.Icon) }
-}
-
-@Composable
-private fun BottomCard(x: Int, title: String, icon: ImageVector, iconSize: Int, onClick: () -> Unit) {
-    DashCard(Modifier.at(x, BOTTOM_Y, CARD_W, BOTTOM_H), onClick = onClick) {
-        IconWell(icon, iconSize, 11)
-        TextAt(title, 68, 23, DashType.Headline.copy(fontSize = 19.sp))
-        DashIcon(DashIcons.Chev, 22, Dash.Text3, Modifier.offset((CARD_W - 38).dp, 22.dp))
-    }
-}
-
-/** Una tarjeta dividida en dos botones (Radio FM | Música BT). */
-@Composable
-private fun SplitBottomCard(
-    x: Int,
-    leftTitle: String, leftIcon: ImageVector, onLeft: () -> Unit,
-    rightTitle: String, rightIcon: ImageVector, onRight: () -> Unit,
-) {
-    val half = CARD_W / 2
-    DashCard(Modifier.at(x, BOTTOM_Y, CARD_W, BOTTOM_H)) {
-        Box(Modifier.at(0, 0, half, BOTTOM_H).clickable(onClickLabel = leftTitle, onClick = onLeft)) {
-            IconWell(leftIcon, 28, 11)
-            TextAt(leftTitle, 68, 23, DashType.Headline.copy(fontSize = 19.sp), maxWidth = (half - 72).dp)
-        }
-        Box(Modifier.at(half, 14, 1, 38).fillMaxHeight().background(Color(0x17FFFFFF)))
-        Box(Modifier.at(half, 0, CARD_W - half, BOTTOM_H).clickable(onClickLabel = rightTitle, onClick = onRight)) {
-            IconWell(rightIcon, 24, 11)
-            TextAt(rightTitle, 68, 23, DashType.Headline.copy(fontSize = 19.sp), maxWidth = (CARD_W - half - 72).dp)
-        }
+private fun LineButton(x: Int, w: Int, title: String, icon: ImageVector, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        Modifier.at(x, BOTTOM_Y, w, BOTTOM_H).clip(shape).border(1.dp, Color(0x21FFFFFF), shape)
+            .clickable(onClickLabel = title, onClick = onClick),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DashIcon(icon, 24, Color(0x80EBEBF0))
+        Spacer(Modifier.width(12.dp))
+        Text(title, style = DashType.Headline.copy(fontSize = 18.sp, color = Color(0x9EEBEBF0)), maxLines = 1)
     }
 }

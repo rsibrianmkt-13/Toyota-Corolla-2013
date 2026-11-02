@@ -62,14 +62,71 @@ class AppContainer(context: Context) {
     init {
         // Cuando el teléfono se conecta por Bluetooth, la sesión de música aparece después: releerla.
         scope.launch {
-            status.phoneConnected.drop(1).collect {
+            status.phoneConnected.drop(1).collect { connected ->
                 media.refresh()
                 delay(2_000)
                 media.refresh()
+                // Recién conectado y sin reproductor: despertar Música BT para que play funcione a la primera.
+                if (connected) {
+                    delay(2_000)
+                    if (!media.state.value.hasSession) wakeBtMusic(thenPlay = false)
+                }
             }
         }
         // Buscar actualización en GitHub poco después de arrancar.
         scope.launch { delay(8_000); updater.check(force = true) }
+    }
+
+    /** CorollaDash está en pantalla (lo marca MainActivity). */
+    @Volatile var inForeground = false
+    private var waking = false
+
+    /**
+     * La música por Bluetooth solo existe cuando la app Música BT de la radio se abrió al menos una vez.
+     * 1) Intento silencioso: tecla multimedia dirigida a esa app.
+     * 2) Si no aparece el reproductor: abrirla un instante y volver solos a CorollaDash.
+     */
+    fun wakeBtMusic(thenPlay: Boolean) {
+        if (waking) return
+        val pkg = config.packageOf(com.bryan.corolladash.settings.ExternalApp.MUSIC_BT)
+        if (pkg.isBlank()) {
+            if (thenPlay) media.playPause()
+            return
+        }
+        waking = true
+        scope.launch {
+            try {
+                if (thenPlay) media.sendMediaButtonTo(pkg, android.view.KeyEvent.KEYCODE_MEDIA_PLAY)
+                repeat(4) {
+                    delay(500)
+                    media.refresh()
+                    if (media.state.value.hasSession) return@launch
+                }
+                if (!inForeground || !launcher.launch(pkg)) return@launch
+                delay(1_800)
+                runCatching {
+                    app.startActivity(
+                        android.content.Intent(app, MainActivity::class.java).addFlags(
+                            android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                        )
+                    )
+                }
+                for (i in 0 until 8) {
+                    delay(500)
+                    media.refresh()
+                    if (media.state.value.hasSession) break
+                }
+                val st = media.state.value
+                if (thenPlay && st.hasSession && !st.isPlaying) media.playPause()
+            } finally {
+                waking = false
+            }
+        }
+    }
+
+    /** Play desde CorollaDash: si aún no hay reproductor Bluetooth, despertarlo primero. */
+    fun playPause() {
+        if (media.state.value.hasSession) media.playPause() else wakeBtMusic(thenPlay = true)
     }
 
     /** Re-suscribe el GPS (al conceder permiso o al volver a primer plano). */

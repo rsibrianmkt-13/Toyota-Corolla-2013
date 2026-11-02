@@ -38,11 +38,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        container.inForeground = true
         applyImmersive()
         container.onForeground()
         resumeTick.intValue++
         // Kilometraje GPS continuo (solo si ya hay permiso de ubicación).
         if (container.gps.hasPermission()) OdometerService.start(this)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        container.inForeground = false
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

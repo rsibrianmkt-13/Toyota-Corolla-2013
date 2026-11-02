@@ -326,6 +326,12 @@ object DashIcons {
       }
     }
 
+    val ChevU: ImageVector by lazy {
+      icon("chevu") {
+        p("M5.5 15 12 8.5 18.5 15", fill = false, stroke = true, width = 2.0f, alpha = 1.0f)
+      }
+    }
+
     val Search: ImageVector by lazy {
       icon("search") {
         p("M4 10.5a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0zM15.3 15.3 20 20", fill = false, stroke = true, width = 1.9f, alpha = 1.0f)

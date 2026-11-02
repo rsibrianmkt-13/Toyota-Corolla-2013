@@ -1,4 +1,4 @@
-# Corolla Dash — v1.0.0
+# Corolla Dash — v1.1.0
 
 Dashboard/launcher para la pantalla VECHTEL (`auto_rk_t20`, Android 15, 1280×720) del Toyota Corolla 2013.
 Kotlin + Jetpack Compose. Funciona sin Internet. Solo muestra datos reales.
@@ -140,3 +140,12 @@ Si cambias de firma (otro equipo, o de debug a release) Android pide desinstalar
 - **Tocar el carro** (Inicio) abre Combustible.
 
 Descarga directa del último APK: https://github.com/rsibrianmkt-13/Toyota-Corolla-2013/raw/apk/CorollaDash-latest.apk
+
+## Novedades v1.1.0
+
+- **Inicio**: tarjetas más altas; velocidad más delgada con barra de nivel; mapa cuadrado decorativo + **Este viaje** (km, tiempo manejando y parte del tanque usada); música con **A continuación** (si el teléfono comparte la cola) o **Escuchadas antes**; botones de abajo de solo línea; esquinas iguales (24).
+- **Vista limpia**: carro algo más pequeño, música más cerca, mismos botones de línea.
+- **Música**: pantalla sin tarjeta; con carátula, fondo con sus colores muy difuminado; sin carátula, solo texto. Deslizar hacia arriba abre la letra en grande (abajo o ✕ la cierra). Pausa sin círculo.
+- **Menú lateral** de alto completo; sin fondo ondulado arriba; fecha corta ("28 oct").
+- **Ícono** con el logo de Toyota.
+- **Música BT**: al conectar el teléfono o al tocar play sin reproductor, CorollaDash despierta la app Música BT de la radio y vuelve sola.
