@@ -150,6 +150,8 @@ fun HomeMusicCard(
     actions: MusicActions,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    onLyrics: () -> Unit = {},
+    onVoice: () -> Unit = {},
 ) {
     val st = status(m, phoneConnected)
     val enabled = st == MusicStatus.PLAYING || st == MusicStatus.IDLE
@@ -182,16 +184,28 @@ fun HomeMusicCard(
 
         Controls(m, actions, centerX = w / 2, centerY = 268, playSize = 80, enabled = enabled, side = 64, gap = 120)
 
-        // Abajo: próximas canciones (si el reproductor comparte su cola) o las escuchadas antes.
-        val list = m.upNext.ifEmpty { m.recent }
-        if (st == MusicStatus.PLAYING && list.isNotEmpty()) {
-            Box(Modifier.at(22, 326, w - 44, 1).background(Dash.Border))
-            TextAt(if (m.upNext.isNotEmpty()) "A continuación" else "Escuchadas antes", 22, 344, QueueLabel)
-            list.forEachIndexed { i, song ->
-                Row(Modifier.offset(22.dp, (378 + i * 34).dp).width((w - 44).dp)) {
-                    Text(song.title, style = QueueTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                    song.artist?.let { Text(" · $it", style = QueueArtist, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                }
+        // Abajo: atajos sin cajas, separados por líneas finas.
+        Box(Modifier.at(22, 326, w - 44, 1).background(Dash.Border))
+        val cw = (w - 44) / 4
+        val shortcuts = listOf(
+            Triple(DashIcons.Shuffle, "Aleatorio", m.shuffleOn) to actions.toggleShuffle,
+            Triple(if (m.repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE) DashIcons.RepeatOne else DashIcons.Repeat, "Repetir",
+                m.repeatMode != PlaybackStateCompat.REPEAT_MODE_NONE) to actions.cycleRepeat,
+            Triple(DashIcons.Lyrics, "Letra", false) to onLyrics,
+            Triple(DashIcons.Mic, "Ok Google", false) to onVoice,
+        )
+        shortcuts.forEachIndexed { i, (info, onClick) ->
+            val (icon, label, on) = info
+            val x = 22 + i * cw
+            if (i > 0) Box(Modifier.at(x, 366, 1, 74).background(Dash.Border))
+            Column(
+                Modifier.at(x, 344, cw, 118).clip(RoundedCornerShape(24.dp)).clickable(onClickLabel = label, onClick = onClick),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                DashIcon(icon, 28, if (on) Dash.Text else ShortcutDim)
+                Spacer(Modifier.height(12.dp))
+                Text(label, style = DashType.Label.copy(fontSize = 15.sp, color = if (on) Dash.Text else ShortcutDim), maxLines = 1)
             }
         }
         VolumeHud(volume, Modifier.align(Alignment.Center))
@@ -200,6 +214,7 @@ fun HomeMusicCard(
 
 /** Ancho de la tarjeta de música del Inicio. */
 const val HOME_MUSIC_W = 526
+private val ShortcutDim = Color(0x8CEBEBF0)
 private val QueueLabel = DashType.Label.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xB38E8E93))
 private val QueueTitle = DashType.Label.copy(fontSize = 17.sp, fontWeight = FontWeight.Light, color = Color(0x8CC7C7CC))
 private val QueueArtist = DashType.Label.copy(fontSize = 17.sp, fontWeight = FontWeight.Light, color = Color(0x738E8E93))

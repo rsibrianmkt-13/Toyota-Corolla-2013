@@ -86,6 +86,9 @@ import com.bryan.corolladash.ui.screens.HomeScreen
 import com.bryan.corolladash.ui.screens.MusicActions
 import com.bryan.corolladash.ui.screens.MusicScreen
 import com.bryan.corolladash.ui.screens.MusicBackdrop
+import com.bryan.corolladash.ui.screens.FuelSummary
+import com.bryan.corolladash.ui.screens.WeatherScreen
+import com.bryan.corolladash.ui.screens.rememberPlaceName
 import com.bryan.corolladash.ui.screens.MessageBanner
 import com.bryan.corolladash.ui.screens.SongSearchOverlay
 import com.bryan.corolladash.ui.screens.QuickActions
@@ -105,7 +108,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /** Secciones de la barra lateral. Android Auto no es sección: abre la app externa. */
-enum class Section { HOME, MUSIC, APPS, SETTINGS, FUEL, MAP }
+enum class Section { HOME, MUSIC, APPS, SETTINGS, FUEL, MAP, WEATHER }
 
 /** Velocidad GPS real a partir de la cual se bloquean cambios de configuración. */
 private const val LOCK_SPEED_KMH = 8
@@ -134,13 +137,20 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
     val fills by c.fuel.fills.collectAsStateWithLifecycle()
     val trip by c.odometer.trip.collectAsStateWithLifecycle()
     LaunchedEffect(resumeTick) { c.odometer.refreshTrip() }
-    // Parte del tanque usada desde la última recarga = km recorridos ÷ (km/gal promedio × 13.2 gal del Corolla 2013).
-    val tankUsed = remember(fills, (odometerKm * 2).toInt()) {
+    // Tanque: restante = 1 − km desde la recarga ÷ (km/gal promedio × 13.2 gal del Corolla 2013).
+    val fuelSummary = remember(fills, (odometerKm * 2).toInt()) {
         val st = c.fuel.stats(odometerKm)
-        val avg = st.averageKmPerGallon
+        val avg = st.averageKmPerGallon ?: st.lastKmPerGallon
         val since = st.kmSinceLastFill
-        if (avg != null && avg > 0 && since != null) (since / (avg * TANK_GALLONS)).toFloat().coerceIn(0f, 1f) else null
+        if (avg != null && avg > 0 && since != null) {
+            val full = avg * TANK_GALLONS
+            val left = (1.0 - since / full).coerceIn(0.0, 1.0)
+            FuelSummary(left.toFloat(), (full - since).coerceAtLeast(0.0).toInt(), avg)
+        } else {
+            FuelSummary(null, null, avg)
+        }
     }
+    val place = rememberPlaceName(speed.latitude, speed.longitude)
     val phoneName by c.status.phoneName.collectAsStateWithLifecycle()
     val destination by c.nav.destination.collectAsStateWithLifecycle()
     val route by c.nav.route.collectAsStateWithLifecycle()
@@ -394,6 +404,8 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
             go = { destination?.let { navigateTo(it) } },
             openFuel = { section.value = Section.FUEL },
             retryLyrics = { c.lyrics.forceRetry() },
+            openWeather = { section.value = Section.WEATHER },
+            voice = { startVoice() },
         )
     }
 
@@ -487,8 +499,9 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
                     driving = moving,
                     destination = destination,
                     route = route,
-                    trip = trip,
-                    tankUsed = tankUsed,
+                    weather = weather,
+                    place = place,
+                    fuel = fuelSummary,
                     music = musicActions,
                     a = homeActions,
                 )
@@ -551,6 +564,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
                             },
                             onDelete = { id -> c.fuel.delete(id) },
                         )
+                        Section.WEATHER -> WeatherScreen(weather, place)
                         else -> SettingsScreen(
                             page = settingsPage,
                             apps = apps,
@@ -639,6 +653,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
             phoneConnected = phoneConnected,
             wifiOn = wifiOn,
             nightOn = night,
+            phoneName = phoneName,
             controls = c.controls,
             actions = QuickActions(
                 bluetooth = { c.controls.openBluetooth() },

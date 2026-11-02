@@ -10,6 +10,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -61,10 +67,12 @@ class QuickActions(
 )
 
 /**
- * Centro de control (inspirado en iOS), monocromático, centrado en la pantalla.
+ * Centro de control, con el mismo lenguaje de líneas finas del resto de la app (sin cajas pesadas):
+ *  arriba  Bluetooth · Wi-Fi · Ecualizador · Ajustes (punto blanco = activo)
+ *  medio   Brillo y Volumen en barras horizontales anchas
+ *  abajo   Modo noche · Reposo · Apagar pantalla
  * Se cierra tocando fuera; el fondo se desenfoca desde DashboardApp.
  * Bluetooth y Wi-Fi no se pueden conmutar desde una app en Android 15: abren su panel del sistema.
- * Brillo y volumen se cambian directamente (brillo requiere el permiso "Modificar ajustes del sistema").
  */
 @Composable
 fun QuickSettingsPanel(
@@ -75,158 +83,137 @@ fun QuickSettingsPanel(
     nightOn: Boolean,
     controls: SystemControls,
     actions: QuickActions,
+    phoneName: String? = null,
 ) {
     AnimatedVisibility(visible, enter = fadeIn(tween(200)), exit = fadeOut(tween(160))) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color(0x80000000))
+                .background(Color(0x73000000))
                 .clickable(remember { MutableInteractionSource() }, null, onClick = actions.dismiss)
         )
     }
     AnimatedVisibility(
         visible,
         modifier = Modifier.at(PANEL_X, PANEL_Y, PANEL_W, PANEL_H),
-        enter = fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.92f),
-        exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.94f),
+        enter = fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.94f),
+        exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.96f),
     ) {
+        val shape = RoundedCornerShape(24.dp)
         Box(
             Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(40.dp))
-                .background(Color(0xF0121315))
-                .border(1.dp, Dash.BorderStrong, RoundedCornerShape(40.dp))
+                .clip(shape)
+                .background(Color(0xDB121316))
+                .border(1.dp, Color(0x1AFFFFFF), shape)
                 // Toques dentro del panel no lo cierran.
                 .clickable(remember { MutableInteractionSource() }, null) {}
-                .padding(26.dp),
         ) {
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(GAP.dp)) {
-                Column(Modifier.width(540.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(GAP.dp)) {
-                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(GAP.dp)) {
-                        WideTile(
-                            DashIcons.Bt, "Bluetooth",
-                            when { !bluetoothOn -> "Desactivado"; phoneConnected -> "Conectado"; else -> "Activado" },
-                            active = bluetoothOn, onClick = actions.bluetooth, modifier = Modifier.weight(1f),
-                        )
-                        WideTile(
-                            DashIcons.Wifi, "Wi-Fi", if (wifiOn) "Conectado" else "Sin conexión",
-                            active = wifiOn, onClick = actions.wifi, modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(GAP.dp)) {
-                        SquareTile(DashIcons.Moon, "Modo noche", nightOn, actions.toggleNight, Modifier.weight(1f))
-                        SquareTile(DashIcons.Eq, "Ecualizador", false, actions.equalizer, Modifier.weight(1f))
-                        SquareTile(DashIcons.Gear, "Ajustes", false, actions.settings, Modifier.weight(1f))
-                    }
-                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(GAP.dp)) {
-                        WideTile(DashIcons.Clock, "Reposo", "Reloj tenue", active = false, onClick = actions.rest, modifier = Modifier.weight(1f))
-                        WideTile(DashIcons.Power, "Pantalla", "Apagar", active = false, onClick = actions.screenOff, modifier = Modifier.weight(1f))
-                    }
+            // ---- Arriba: interruptores
+            val cw = (PANEL_W - 48) / 4
+            val toggles = listOf(
+                ToggleItem(DashIcons.Bt, "Bluetooth", when { !bluetoothOn -> "Desactivado"; phoneConnected -> phoneName ?: "Conectado"; else -> "Activado" }, bluetoothOn, actions.bluetooth),
+                ToggleItem(DashIcons.Wifi, "Wi-Fi", if (wifiOn) "Conectado" else "Sin conexión", wifiOn, actions.wifi),
+                ToggleItem(DashIcons.Eq, "Ecualizador", "Abrir", false, actions.equalizer),
+                ToggleItem(DashIcons.Gear, "Ajustes", "CorollaDash", false, actions.settings),
+            )
+            toggles.forEachIndexed { i, t ->
+                val x = 24 + i * cw
+                if (i > 0) Box(Modifier.at(x, 48, 1, 92).background(LineColor))
+                Column(
+                    Modifier.at(x, 24, cw, 140).clip(RoundedCornerShape(24.dp)).clickable(onClickLabel = t.label, onClick = t.onClick),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    DashIcon(t.icon, 32, if (t.on) Dash.Text else Color(0x80EBEBF0))
+                    Spacer(Modifier.height(6.dp))
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(if (t.on) Dash.Text else Color.Transparent))
+                    Spacer(Modifier.height(8.dp))
+                    Text(t.label, style = DashType.Body.copy(fontSize = 18.sp, fontWeight = FontWeight.Medium, color = if (t.on) Dash.Text else Color(0xB3EBEBF0)), maxLines = 1)
+                    Spacer(Modifier.height(2.dp))
+                    Text(t.state, style = DashType.Footnote.copy(fontSize = 13.sp, color = Color(0xFF8E8E93)), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 10.dp))
                 }
+            }
+            Box(Modifier.at(24, 172, PANEL_W - 48, 1).background(LineColor))
 
-                var vol by remember(visible) { mutableFloatStateOf(controls.volumeFraction()) }
-                val canWrite = remember(visible) { controls.canWriteSettings() }
-                var bri by remember(visible) { mutableFloatStateOf(controls.brightnessFraction()) }
+            // ---- Medio: barras
+            var vol by remember(visible) { mutableFloatStateOf(controls.volumeFraction()) }
+            val canWrite = remember(visible) { controls.canWriteSettings() }
+            var bri by remember(visible) { mutableFloatStateOf(controls.brightnessFraction()) }
+            HBarRow(DashIcons.Sun, bri, enabled = canWrite, y = 196, onChange = { bri = it; controls.setBrightness(it) }, onDisabledClick = { controls.openWriteSettingsPermission() })
+            HBarRow(DashIcons.Vol, vol, enabled = true, y = 268, onChange = { vol = it; controls.setVolume(it) }, onDisabledClick = {})
+            Box(Modifier.at(24, 348, PANEL_W - 48, 1).background(LineColor))
 
-                if (canWrite) {
-                    VerticalSlider(bri, DashIcons.Sun, "Brillo", { bri = it; controls.setBrightness(it) }, Modifier.weight(1f))
-                } else {
-                    // Sin permiso: el control abre la pantalla para concederlo.
-                    Box(
-                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(32.dp)).background(Color(0xFF232427))
-                            .clickable { controls.openWriteSettingsPermission() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            DashIcon(DashIcons.Sun, 36, Dash.Icon2)
-                            Spacer(Modifier.height(10.dp))
-                            Text("Permitir", style = DashType.Footnote.copy(fontSize = 16.sp, color = Dash.Text2))
-                        }
-                    }
+            // ---- Abajo: modos
+            val aw = (PANEL_W - 48) / 3
+            val modes = listOf(
+                ToggleItem(DashIcons.Moon, "Modo noche", "", nightOn, actions.toggleNight),
+                ToggleItem(DashIcons.Clock, "Reposo", "", false, actions.rest),
+                ToggleItem(DashIcons.Power, "Apagar pantalla", "", false, actions.screenOff),
+            )
+            modes.forEachIndexed { i, t ->
+                val x = 24 + i * aw
+                if (i > 0) Box(Modifier.at(x, 376, 1, 56).background(LineColor))
+                Row(
+                    Modifier.at(x, 360, aw, 88).clip(RoundedCornerShape(24.dp)).clickable(onClickLabel = t.label, onClick = t.onClick),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DashIcon(t.icon, 26, if (t.on) Dash.Text else Color(0xB3EBEBF0))
+                    Spacer(Modifier.width(14.dp))
+                    Text(t.label, style = DashType.Body.copy(fontSize = 18.sp, color = if (t.on) Dash.Text else Color(0xCCEBEBF0)), maxLines = 1)
                 }
-                VerticalSlider(vol, DashIcons.Vol, "Volumen", { vol = it; controls.setVolume(it) }, Modifier.weight(1f))
             }
         }
     }
 }
+
+private class ToggleItem(val icon: ImageVector, val label: String, val state: String, val on: Boolean, val onClick: () -> Unit)
+
+private val LineColor = Color(0x14FFFFFF)
 
 // Panel centrado en el lienzo de 1280 × 720.
 private const val PANEL_W = 900
 private const val PANEL_H = 470
 private const val PANEL_X = (1280 - PANEL_W) / 2
 private const val PANEL_Y = (720 - PANEL_H) / 2
-private const val GAP = 16
 
+/** Barra horizontal ancha: icono, pista de 16 px con relleno degradado y perilla, porcentaje a la derecha. Tocar o arrastrar. */
 @Composable
-private fun WideTile(icon: ImageVector, title: String, sub: String, active: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    Row(
-        modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(32.dp))
-            .background(Color(0xFF1C1D20))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.size(64.dp).clip(CircleShape).background(if (active) Dash.Active else Color(0xFF2C2D31)),
-            contentAlignment = Alignment.Center,
-        ) { DashIcon(icon, 32, if (active) Dash.Bg else Dash.Icon) }
-        Spacer(Modifier.width(16.dp))
-        Column {
-            Text(title, style = DashType.Body.copy(fontSize = 21.sp), maxLines = 1)
-            Spacer(Modifier.height(2.dp))
-            Text(sub, style = DashType.Footnote.copy(fontSize = 16.sp, color = Dash.Text2), maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun SquareTile(icon: ImageVector, title: String, active: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    Column(
-        modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(32.dp))
-            .background(if (active) Dash.Active else Color(0xFF1C1D20))
-            .clickable(onClick = onClick)
-            .padding(vertical = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        DashIcon(icon, 38, if (active) Dash.Bg else Dash.Icon)
-        Text(title, style = DashType.Footnote.copy(fontSize = 17.sp, color = if (active) Dash.Bg else Dash.Text2), maxLines = 1)
-    }
-}
-
-/** Barra vertical tipo iOS: gris carbón con relleno blanco desde abajo. Tocar o arrastrar. */
-@Composable
-private fun VerticalSlider(value: Float, icon: ImageVector, label: String, onChange: (Float) -> Unit, modifier: Modifier) {
+private fun HBarRow(icon: ImageVector, value: Float, enabled: Boolean, y: Int, onChange: (Float) -> Unit, onDisabledClick: () -> Unit) {
     val cb by rememberUpdatedState(onChange)
     val v = value.coerceIn(0f, 1f)
-    Box(
-        modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(32.dp))
-            .background(Color(0xFF232427))
-            .pointerInput(Unit) {
-                detectTapGestures { o -> cb((1f - o.y / size.height).coerceIn(0f, 1f)) }
-            }
-            .pointerInput(Unit) {
-                detectVerticalDragGestures { change, _ -> cb((1f - change.position.y / size.height).coerceIn(0f, 1f)) }
-            },
-        contentAlignment = Alignment.BottomCenter,
-    ) {
-        Box(Modifier.fillMaxWidth().fillMaxHeight(v).background(Dash.Active))
-        DashIcon(icon, 36, if (v > 0.12f) Dash.Bg else Dash.Icon, Modifier.padding(bottom = 22.dp))
-        Column(
-            Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                "${(v * 100).roundToInt()}%",
-                style = DashType.Body.copy(fontSize = 20.sp, color = if (v > 0.9f) Dash.Bg else Dash.Text),
-            )
-            Text(label, style = DashType.Footnote.copy(fontSize = 15.sp, color = if (v > 0.84f) Dash.Bg else Dash.Text2))
-        }
+    val trackX = 98
+    val trackW = PANEL_W - 40 - 30 - 28 - 120
+    DashIcon(icon, 28, Color(0xB3EBEBF0), Modifier.offset(40.dp, (y + 9).dp))
+    if (!enabled) {
+        // Sin permiso para el brillo del sistema: tocar abre la pantalla para concederlo.
+        Box(
+            Modifier.at(trackX, y + 4, trackW, 38).clip(RoundedCornerShape(19.dp)).border(1.dp, LineColor, RoundedCornerShape(19.dp))
+                .clickable(onClick = onDisabledClick),
+            contentAlignment = Alignment.Center,
+        ) { Text("Permitir control de brillo", style = DashType.Label.copy(fontSize = 15.sp, color = Color(0xB3EBEBF0))) }
+        return
     }
+    Box(
+        Modifier
+            .at(trackX - 13, y, trackW + 26, 46)
+            .pointerInput(Unit) { detectTapGestures { o -> cb(((o.x - 13.dp.toPx()) / (size.width - 26.dp.toPx())).coerceIn(0f, 1f)) } }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures { change, _ ->
+                    change.consume()
+                    cb(((change.position.x - 13.dp.toPx()) / (size.width - 26.dp.toPx())).coerceIn(0f, 1f))
+                }
+            }
+    ) {
+        Box(Modifier.at(13, 15, trackW, 16).clip(RoundedCornerShape(8.dp)).background(Color(0x1AFFFFFF))) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(v.coerceAtLeast(0.04f)).clip(RoundedCornerShape(8.dp)).background(Brush.horizontalGradient(listOf(Color(0xFF9A9AA0), Color(0xFFF2F2F4)))))
+        }
+        Box(Modifier.at((13 + trackW * v - 13).toInt(), 10, 26, 26).clip(CircleShape).background(Dash.Text))
+    }
+    Text(
+        "${(v * 100).roundToInt()}%",
+        style = DashType.Body.copy(fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Dash.Text, textAlign = TextAlign.End),
+        modifier = Modifier.offset((PANEL_W - 104).dp, (y + 10).dp).width(64.dp),
+    )
 }

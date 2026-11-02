@@ -338,6 +338,18 @@ object DashIcons {
       }
     }
 
+    val Pin: ImageVector by lazy {
+      icon("pin") {
+        p("M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11zM9.7 10a2.3 2.3 0 1 0 4.6 0a2.3 2.3 0 1 0 -4.6 0", fill = false, stroke = true, width = 1.7f, alpha = 1.0f)
+      }
+    }
+
+    val Drop: ImageVector by lazy {
+      icon("drop") {
+        p("M12 3.5s-5.5 6.2-5.5 10.2a5.5 5.5 0 0 0 11 0C17.5 9.7 12 3.5 12 3.5z", fill = true, stroke = false, width = 1.0f, alpha = 1.0f)
+      }
+    }
+
     val ChevU: ImageVector by lazy {
       icon("chevu") {
         p("M5.5 15 12 8.5 18.5 15", fill = false, stroke = true, width = 2.0f, alpha = 1.0f)

@@ -170,3 +170,9 @@ Descarga directa del último APK: https://github.com/rsibrianmkt-13/Toyota-Corol
 - Letra en Música: sin barra superior, solo portada, nombre y letra.
 - Barra de volumen más corta y ancha.
 - Micrófono: activa primero el asistente del teléfono a través de la app Teléfono BT; Diagnóstico → "Asistente de voz".
+
+## Novedades v1.3.0
+
+- **Inicio**: atajos de música sin cajas (Aleatorio, Repetir, Letra, Ok Google) separados por líneas; el lateral ahora tiene **clima** (lugar, temperatura, próximas horas) y **combustible** con medidor de tanque, autonomía y km/gal.
+- **Pantalla de clima** (tocar la tarjeta): actual, sensación, humedad, viento, lluvia del día, próximas 7 horas y 5 días.
+- **Centro de control** nuevo: Bluetooth · Wi-Fi · Ecualizador · Ajustes; brillo y volumen en barras horizontales; Modo noche · Reposo · Apagar pantalla.

@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontWeight
 import com.bryan.corolladash.fuel.Trip
+import com.bryan.corolladash.weather.Weather
 import com.bryan.corolladash.ui.components.tight
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -85,6 +86,10 @@ class HomeActions(
     val openFuel: () -> Unit,
     /** Volver a pedir la letra (botón de recargar). */
     val retryLyrics: () -> Unit = {},
+    /** Pantalla de clima. */
+    val openWeather: () -> Unit = {},
+    /** Asistente de voz ("Ok Google"). */
+    val voice: () -> Unit = {},
 )
 
 private const val TOP = 100
@@ -94,6 +99,7 @@ private const val SPEED_W = 363
 private const val MUSIC_X = 514
 private const val SIDE_X = 1058
 private const val SIDE_W = 200
+private const val WEATHER_H = 214
 private const val BOTTOM_Y = 618
 private const val BOTTOM_H = 58
 
@@ -118,8 +124,9 @@ fun HomeScreen(
     driving: Boolean,
     destination: Place?,
     route: RouteInfo?,
-    trip: Trip,
-    tankUsed: Float?,
+    weather: Weather?,
+    place: String?,
+    fuel: FuelSummary,
     music: MusicActions,
     a: HomeActions,
 ) {
@@ -141,9 +148,14 @@ fun HomeScreen(
                 when (p) {
                     HomePage.FULL -> {
                         SpeedCard(speed.speedKmh, speed.permissionGranted, speed.gpsEnabled, a.requestLocation, a.openFuel, Modifier.at(SPEED_X, TOP, SPEED_W, CARD_H).pageSwipe { go(it) })
-                        HomeMusicCard(media, phoneConnected, phoneName, music, a.openMusic, Modifier.at(MUSIC_X, TOP, HOME_MUSIC_W, CARD_H))
-                        MapCard(speed, destination, route, a.openMap, a.go, Modifier.at(SIDE_X, TOP, SIDE_W, SIDE_W).pageSwipe { go(it) }, width = SIDE_W, height = SIDE_W, compact = true)
-                        TripCard(trip, tankUsed, a.openFuel, Modifier.at(SIDE_X, TOP + SIDE_W + 18, SIDE_W, CARD_H - SIDE_W - 18))
+                        HomeMusicCard(
+                            media, phoneConnected, phoneName, music, a.openMusic, Modifier.at(MUSIC_X, TOP, HOME_MUSIC_W, CARD_H),
+                            onLyrics = { if (HomePage.LYRICS in list) onPage(HomePage.LYRICS) else a.openMusic() },
+                            onVoice = a.voice,
+                        )
+                        // Lateral: clima (toca → pantalla de clima) y combustible (toca → Combustible).
+                        WeatherCard(weather, place, a.openWeather, Modifier.at(SIDE_X, TOP, SIDE_W, WEATHER_H).pageSwipe { go(it) })
+                        FuelCard(fuel.tankLeft, fuel.rangeKm, fuel.kmPerGallon, a.openFuel, Modifier.at(SIDE_X, TOP + WEATHER_H + 18, SIDE_W, CARD_H - WEATHER_H - 18))
                     }
                     HomePage.CLEAN -> CleanScene(speed, media, phoneConnected, phoneName, music, a, onSwipe = { go(it) })
                     HomePage.LYRICS -> {
@@ -282,6 +294,10 @@ private fun SpeedBar(kmh: Int, modifier: Modifier) {
 
 private const val SPEED_MAX = 140f
 private const val SPEED_SEGMENTS = 28
+
+/** Datos del tanque para la tarjeta de combustible. */
+@androidx.compose.runtime.Immutable
+data class FuelSummary(val tankLeft: Float?, val rangeKm: Int?, val kmPerGallon: Double?)
 
 // ---------------------------------------------------------------- Este viaje
 
