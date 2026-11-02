@@ -1,0 +1,58 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          validate-wrappers: false
+
+      - name: Compilar (release optimizada, firmada con la clave de debug)
+        run: gradle --no-daemon --stacktrace assembleRelease -PciVersionCode=$((100 + GITHUB_RUN_NUMBER))
+
+      - name: Nombrar APK
+        run: |
+          V=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk "out/CorollaDash-$V-${GITHUB_SHA::7}.apk"
+          cp app/build/outputs/apk/release/app-release.apk out/CorollaDash-latest.apk
+          # Lo lee el actualizador de la app.
+          echo "{\"versionCode\": $((100 + GITHUB_RUN_NUMBER)), \"versionName\": \"$V (#$GITHUB_RUN_NUMBER)\", \"sha\": \"${GITHUB_SHA::7}\"}" > out/version.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CorollaDash-apk
+          path: |
+            out/*.apk
+            out/version.json
+
+      # Copia del último APK en la rama "apk" (un solo commit) para descargarlo fácilmente.
+      - name: Publicar en rama apk
+        run: |
+          cd out
+          git init -q
+          git checkout -q -b apk
+          git add .
+          git -c user.name="github-actions" -c user.email="actions@github.com" commit -qm "APK ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" apk
