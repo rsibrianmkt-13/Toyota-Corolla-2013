@@ -158,3 +158,8 @@ Descarga directa del último APK: https://github.com/rsibrianmkt-13/Toyota-Corol
 - **Aplicaciones**: 6 columnas, iconos de 72 dp y nombres de 17 sp; Sistema en dos filas de accesos grandes; todo desplaza junto.
 - **Letra**: línea actual 46 sp, vecinas 27/25 sp, máximo 5 líneas; el volumen lateral se oculta a los 2 s y vuelve al tocar; icono para **recargar** la letra.
 - **Avisos de mensajes** (WhatsApp, Telegram, SMS) de apps instaladas en la radio; en movimiento solo el remitente.
+
+## v1.2.1
+
+- Volumen en la letra: barra vertical delgada (tocar o arrastrar), se oculta a los 2 s.
+- Micrófono: abre directamente el asistente (Ok Google / Gemini). La lupa avisa si el teléfono no respondió a la búsqueda.

@@ -155,7 +155,7 @@ fun HomeScreen(
                                 onRetry = a.retryLyrics,
                             )
                             // Volumen táctil (+ / −, pasos de 10 %): aparece al tocar y se oculta solo.
-                            AutoHideVolume(music, touches.tick, Modifier.offset((1280 - 26 - 64).dp, 250.dp))
+                            AutoHideVolume(music, touches.tick, Modifier.offset((1280 - 30 - 44).dp, 230.dp))
                         }
                     }
                 }

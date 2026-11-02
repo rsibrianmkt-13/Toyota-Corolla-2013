@@ -101,6 +101,7 @@ import com.bryan.corolladash.ui.screens.parent
 import com.bryan.corolladash.ui.theme.Dash
 import com.bryan.corolladash.ui.theme.DashType
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /** Secciones de la barra lateral. Android Auto no es sección: abre la app externa. */
@@ -162,6 +163,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
     var settingsPage by remember { mutableStateOf<SettingsPage>(SettingsPage.Root) }
     var quickOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
+    val uiScope = androidx.compose.runtime.rememberCoroutineScope()
     var pendingConfirm by remember { mutableStateOf<(() -> Unit)?>(null) }
     var confirmedUntil by remember { mutableLongStateOf(0L) }
     var toast by remember { mutableStateOf<String?>(null) }
@@ -293,42 +295,43 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
 
     // ---------------------------------------------------------------- Buscar canción (teclado / voz)
 
-    /** Envía la búsqueda al reproductor Bluetooth; si la radio no lo permite, lo dice. */
+    /**
+     * Lupa: envía la búsqueda al reproductor Bluetooth. Algunas radios dicen aceptarla pero el teléfono
+     * no responde: si en 6 s no cambió la canción, se avisa y se sugiere el micrófono (asistente).
+     */
     fun searchSong(q: String) {
         searchOpen = false
-        toast = if (c.media.playFromSearch(q)) "Buscando “$q”…" else "Tu radio no permite buscar por Bluetooth · usa el micrófono"
+        val before = c.media.state.value.title
+        if (!c.media.playFromSearch(q)) {
+            toast = "Tu radio no permite buscar por Bluetooth · usa el micrófono"
+            return
+        }
+        toast = "Buscando “$q”…"
+        uiScope.launch {
+            delay(6_000)
+            if (c.media.state.value.title == before) toast = "El teléfono no respondió a la búsqueda · usa el micrófono"
+        }
     }
 
-    /** "Ok Google": el asistente de la radio (en muchas radios, el del teléfono por Bluetooth). */
-    fun openAssistant() {
-        val intents = listOf(
-            android.content.Intent(android.content.Intent.ACTION_VOICE_COMMAND),
-            android.content.Intent("android.intent.action.VOICE_ASSIST"),
+    /**
+     * Micrófono: abre el asistente ("Ok Google" / Gemini) para pedir la canción con la voz.
+     * Primero el asistente predeterminado; luego Google, Gemini y cualquier comando de voz de la radio.
+     */
+    fun startVoice() {
+        searchOpen = false
+        val google = "com.google.android.googlequicksearchbox"
+        val intents = listOfNotNull(
             android.content.Intent(android.content.Intent.ACTION_ASSIST),
+            android.content.Intent(android.content.Intent.ACTION_VOICE_COMMAND).setPackage(google),
+            android.content.Intent("android.intent.action.VOICE_ASSIST").setPackage(google),
+            ctx.packageManager.getLaunchIntentForPackage("com.google.android.apps.bard"),
+            android.content.Intent("android.intent.action.VOICE_ASSIST"),
+            android.content.Intent(android.content.Intent.ACTION_VOICE_COMMAND),
         )
         val ok = intents.any { i ->
             runCatching { ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
         }
-        if (!ok) toast = "No hay asistente de voz en la radio"
-    }
-
-    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
-        val text = res.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        if (!text.isNullOrBlank()) searchSong(text)
-    }
-
-    /** Micrófono: si la radio acepta búsquedas, voz → texto → búsqueda; si no, "Ok Google". */
-    fun startVoice() {
-        searchOpen = false
-        if (!c.media.canSearch()) {
-            openAssistant()
-            return
-        }
-        val i = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "es-419")
-            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "¿Qué canción quieres escuchar?")
-        if (runCatching { voiceLauncher.launch(i) }.isFailure) openAssistant()
+        if (!ok) toast = "No hay asistente de voz (Google / Gemini) en la radio"
     }
 
     /** Lupa: escribir solo con el vehículo detenido. */
@@ -365,6 +368,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
             cycleRepeat = c.media::cycleRepeat,
             volumeStep = { up -> c.controls.stepVolume(up) },
             volumeLevel = { c.controls.volumeFraction() },
+            setVolume = { c.controls.setVolume(it) },
         )
     }
 

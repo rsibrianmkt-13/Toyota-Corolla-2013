@@ -50,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -107,6 +108,8 @@ class MusicActions(
     val volumeStep: (Boolean) -> Float,
     /** Nivel actual 0–1 (para mostrarlo junto a los botones de volumen). */
     val volumeLevel: () -> Float = { 0f },
+    /** Fijar el volumen 0–1 (barra deslizable). */
+    val setVolume: (Float) -> Unit = {},
 )
 
 /** Situación real de la música, en orden de prioridad. */
@@ -850,7 +853,7 @@ internal fun Modifier.onAnyTouch(t: TouchTicker): Modifier = pointerInput(t) {
     }
 }
 
-/** Volumen + / − que aparece al tocar la pantalla y se oculta a los 2 s sin uso. */
+/** Barra de volumen discreta que aparece al tocar la pantalla y se oculta a los 2 s sin uso. */
 @Composable
 internal fun AutoHideVolume(actions: MusicActions, tick: Int, modifier: Modifier) {
     var visible by remember { mutableStateOf(true) }
@@ -859,8 +862,56 @@ internal fun AutoHideVolume(actions: MusicActions, tick: Int, modifier: Modifier
         delay(2_000)
         visible = false
     }
-    AnimatedVisibility(visible, modifier = modifier, enter = fadeIn(tween(150)), exit = fadeOut(tween(350))) {
-        VolumeControl(actions, Modifier)
+    AnimatedVisibility(visible, modifier = modifier, enter = fadeIn(tween(150)), exit = fadeOut(tween(400))) {
+        VolumeSlider(actions)
+    }
+}
+
+/**
+ * Volumen como barra vertical delgada (sin caja): porcentaje arriba, icono abajo.
+ * Tocar o arrastrar sobre la barra fija el nivel. Se relee cada 1,5 s por si cambia con el volante.
+ */
+@Composable
+internal fun VolumeSlider(actions: MusicActions, modifier: Modifier = Modifier) {
+    var level by remember { mutableFloatStateOf(actions.volumeLevel()) }
+    var dragging by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1500)
+            if (!dragging) level = actions.volumeLevel()
+        }
+    }
+    val set by rememberUpdatedState<(Float) -> Unit> { v ->
+        val f = v.coerceIn(0f, 1f)
+        level = f
+        actions.setVolume(f)
+    }
+    val dim = Color(0x99EBEBF0)
+    Column(modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("${(level * 100).roundToInt()}", style = DashType.Footnote.copy(fontSize = 13.sp, color = dim))
+        Spacer(Modifier.height(10.dp))
+        Box(
+            Modifier
+                .size(44.dp, 230.dp)
+                .pointerInput(Unit) { detectTapGestures { o -> set(1f - o.y / size.height) } }
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragStart = { dragging = true },
+                        onDragEnd = { dragging = false },
+                        onDragCancel = { dragging = false },
+                    ) { ch, _ ->
+                        ch.consume()
+                        set(1f - ch.position.y / size.height)
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.width(6.dp).fillMaxHeight().clip(CircleShape).background(Color(0x1FFFFFFF)), contentAlignment = Alignment.BottomCenter) {
+                Box(Modifier.fillMaxWidth().fillMaxHeight(level.coerceIn(0f, 1f)).clip(CircleShape).background(Color(0xD9EBEBF0)))
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        DashIcon(DashIcons.Vol, 18, dim)
     }
 }
 
@@ -908,7 +959,7 @@ private fun BigLyricsScreen(m: MediaState, lyrics: LyricsState, driving: Boolean
         ) { DashIcon(DashIcons.X, 22, Dash.Icon) }
 
         LyricsPage(m, lyrics, driving, Modifier.at(20, 100, 1125 - 140, 400), onRetry = onRetry)
-        AutoHideVolume(actions, touches.tick, Modifier.offset((1125 - 32 - 64).dp, 150.dp))
+        AutoHideVolume(actions, touches.tick, Modifier.offset((1125 - 24 - 44).dp, 120.dp))
 
         if (m.durationMs > 0) Progress(m, x = 60, y = 528, w = 1005, seekable = m.canSeek && !driving, onSeek = actions.seekTo)
         VolumeHud(volume, Modifier.align(Alignment.Center))
