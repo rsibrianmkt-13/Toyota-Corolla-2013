@@ -316,12 +316,17 @@ fun MusicScreen(
     onRetryLyrics: () -> Unit = {},
     onSearch: () -> Unit = {},
     onVoice: () -> Unit = {},
+    /** La letra en grande está abierta: la barra superior se oculta y el área crece hacia arriba. */
+    onLyricsShown: (Boolean) -> Unit = {},
 ) {
     val st = status(m, phoneConnected)
     var showLyrics by remember { mutableStateOf(false) }
     val canLyrics = lyricsEnabled && st == MusicStatus.PLAYING
     LaunchedEffect(canLyrics) { if (!canLyrics) showLyrics = false }
     BackHandler(enabled = showLyrics) { showLyrics = false }
+    val shown by rememberUpdatedState(onLyricsShown)
+    LaunchedEffect(showLyrics) { shown(showLyrics) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { shown(false) } }
 
     AnimatedContent(
         showLyrics,
@@ -887,12 +892,12 @@ internal fun VolumeSlider(actions: MusicActions, modifier: Modifier = Modifier) 
         actions.setVolume(f)
     }
     val dim = Color(0x99EBEBF0)
-    Column(modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("${(level * 100).roundToInt()}", style = DashType.Footnote.copy(fontSize = 13.sp, color = dim))
+    Column(modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("${(level * 100).roundToInt()}", style = DashType.Footnote.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = dim))
         Spacer(Modifier.height(10.dp))
         Box(
             Modifier
-                .size(44.dp, 230.dp)
+                .size(56.dp, 170.dp)
                 .pointerInput(Unit) { detectTapGestures { o -> set(1f - o.y / size.height) } }
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
@@ -906,19 +911,19 @@ internal fun VolumeSlider(actions: MusicActions, modifier: Modifier = Modifier) 
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Box(Modifier.width(6.dp).fillMaxHeight().clip(CircleShape).background(Color(0x1FFFFFFF)), contentAlignment = Alignment.BottomCenter) {
-                Box(Modifier.fillMaxWidth().fillMaxHeight(level.coerceIn(0f, 1f)).clip(CircleShape).background(Color(0xD9EBEBF0)))
+            Box(Modifier.width(14.dp).fillMaxHeight().clip(RoundedCornerShape(7.dp)).background(Color(0x1FFFFFFF)), contentAlignment = Alignment.BottomCenter) {
+                Box(Modifier.fillMaxWidth().fillMaxHeight(level.coerceIn(0f, 1f)).clip(RoundedCornerShape(7.dp)).background(Color(0xD9EBEBF0)))
             }
         }
         Spacer(Modifier.height(10.dp))
-        DashIcon(DashIcons.Vol, 18, dim)
+        DashIcon(DashIcons.Vol, 20, dim)
     }
 }
 
 // ---------------------------------------------------------------- Letra en grande (Música)
 
 /**
- * Letra en grande con carátula pequeña y volumen táctil (1125×571, sin tarjeta).
+ * Letra en grande con carátula pequeña y volumen (1125×651 desde y20: sin barra superior, sin tarjeta).
  * Se abre deslizando hacia arriba en el reproductor; deslizar hacia abajo, a la izquierda o ✕ vuelve.
  */
 @Composable
@@ -958,10 +963,10 @@ private fun BigLyricsScreen(m: MediaState, lyrics: LyricsState, driving: Boolean
             contentAlignment = Alignment.Center,
         ) { DashIcon(DashIcons.X, 22, Dash.Icon) }
 
-        LyricsPage(m, lyrics, driving, Modifier.at(20, 100, 1125 - 140, 400), onRetry = onRetry)
-        AutoHideVolume(actions, touches.tick, Modifier.offset((1125 - 24 - 44).dp, 120.dp))
+        LyricsPage(m, lyrics, driving, Modifier.at(20, 110, 1125 - 140, 440), onRetry = onRetry)
+        AutoHideVolume(actions, touches.tick, Modifier.offset((1125 - 24 - 56).dp, 180.dp))
 
-        if (m.durationMs > 0) Progress(m, x = 60, y = 528, w = 1005, seekable = m.canSeek && !driving, onSeek = actions.seekTo)
+        if (m.durationMs > 0) Progress(m, x = 60, y = 596, w = 1005, seekable = m.canSeek && !driving, onSeek = actions.seekTo)
         VolumeHud(volume, Modifier.align(Alignment.Center))
     }
 }

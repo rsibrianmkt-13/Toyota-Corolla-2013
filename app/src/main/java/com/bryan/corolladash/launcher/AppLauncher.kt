@@ -111,6 +111,21 @@ class AppLauncher(private val context: Context) {
         return ok
     }
 
+    /** Último intent usado por el botón de micrófono (Diagnóstico). */
+    @Volatile var lastVoice: String? = null
+
+    /** Actividad de voz de la app Teléfono BT (activa el asistente del teléfono por Bluetooth), si existe. */
+    fun voiceActivityOf(packageName: String?): String? = activitiesOf(packageName).firstOrNull { name ->
+        val n = name.substringAfterLast('.').lowercase()
+        listOf("voice", "siri", "assist", "speech", "vr").any { it in n }
+    }
+
+    /** Apps que responden a una acción (Diagnóstico). */
+    fun resolversOf(action: String): String = runCatching {
+        @Suppress("DEPRECATION")
+        pm.queryIntentActivities(Intent(action), 0).joinToString { it.activityInfo.packageName }.ifBlank { "ninguna" }
+    }.getOrDefault("?")
+
     /** Actividades exportadas de un package (para Diagnóstico y para abrir un modo concreto). */
     fun activitiesOf(packageName: String?): List<String> = runCatching {
         if (packageName.isNullOrBlank()) return emptyList()

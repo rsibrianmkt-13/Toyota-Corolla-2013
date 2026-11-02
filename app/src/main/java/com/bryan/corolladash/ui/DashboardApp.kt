@@ -163,6 +163,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
     var settingsPage by remember { mutableStateOf<SettingsPage>(SettingsPage.Root) }
     var quickOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
+    var musicLyrics by remember { mutableStateOf(false) }
     val uiScope = androidx.compose.runtime.rememberCoroutineScope()
     var pendingConfirm by remember { mutableStateOf<(() -> Unit)?>(null) }
     var confirmedUntil by remember { mutableLongStateOf(0L) }
@@ -314,24 +315,29 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
     }
 
     /**
-     * Micrófono: abre el asistente ("Ok Google" / Gemini) para pedir la canción con la voz.
-     * Primero el asistente predeterminado; luego Google, Gemini y cualquier comando de voz de la radio.
+     * Micrófono: activar el asistente del TELÉFONO (como decir "Ok Google") para pedir o cambiar la canción.
+     * El teléfono solo se puede activar a través de la app Teléfono BT de la radio (comando de voz por Bluetooth):
+     *  1) actividad de voz de esa app (nombre con voice/siri/assist/vr), 2) su comando de voz estándar,
+     *  3) si no existe, el asistente de la propia radio (Google / Gemini).
      */
     fun startVoice() {
         searchOpen = false
-        val google = "com.google.android.googlequicksearchbox"
-        val intents = listOfNotNull(
-            android.content.Intent(android.content.Intent.ACTION_ASSIST),
-            android.content.Intent(android.content.Intent.ACTION_VOICE_COMMAND).setPackage(google),
-            android.content.Intent("android.intent.action.VOICE_ASSIST").setPackage(google),
-            ctx.packageManager.getLaunchIntentForPackage("com.google.android.apps.bard"),
-            android.content.Intent("android.intent.action.VOICE_ASSIST"),
-            android.content.Intent(android.content.Intent.ACTION_VOICE_COMMAND),
-        )
-        val ok = intents.any { i ->
+        val phonePkg = c.config.packageOf(ExternalApp.PHONE_BT)
+        val intents = buildList {
+            c.launcher.voiceActivityOf(phonePkg)?.let { add(android.content.Intent().setClassName(phonePkg, it)) }
+            if (phonePkg.isNotBlank()) add(android.content.Intent(android.content.Intent.ACTION_VOICE_COMMAND).setPackage(phonePkg))
+            add(android.content.Intent(android.content.Intent.ACTION_ASSIST))
+            add(android.content.Intent(android.content.Intent.ACTION_VOICE_COMMAND).setPackage("com.google.android.googlequicksearchbox"))
+            add(android.content.Intent("android.intent.action.VOICE_ASSIST").setPackage("com.google.android.googlequicksearchbox"))
+            ctx.packageManager.getLaunchIntentForPackage("com.google.android.apps.bard")?.let { add(it) }
+            add(android.content.Intent("android.intent.action.VOICE_ASSIST"))
+            add(android.content.Intent(android.content.Intent.ACTION_VOICE_COMMAND))
+        }
+        val used = intents.firstOrNull { i ->
             runCatching { ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
         }
-        if (!ok) toast = "No hay asistente de voz (Google / Gemini) en la radio"
+        c.launcher.lastVoice = used?.let { it.component?.flattenToShortString() ?: "${it.action} → ${it.`package` ?: "sistema"}" } ?: "ninguno"
+        if (used == null) toast = "No hay asistente de voz disponible en la radio"
     }
 
     /** Lupa: escribir solo con el vehículo detenido. */
@@ -443,7 +449,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
         // Pantalla Música: fondo con los colores de la carátula, muy difuminado.
         if (section.value == Section.MUSIC && media.title != null) MusicBackdrop(media.art, Modifier.fillMaxSize())
         // En la página de letra solo queda el menú lateral.
-        if (!lyricsPageOpen) {
+        if (!lyricsPageOpen && !(section.value == Section.MUSIC && musicLyrics)) {
             TopBar(
                 btOn, phoneConnected, wifiOn, resumeTick,
                 onQuick = { quickOpen = true },
@@ -490,7 +496,9 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
                 // AnimatedContent impone tamaño fijo 1280×720 a su contenido. El Box exterior (pantalla completa)
                 // libera esa restricción para que el área de contenido mida exactamente 1125×571.
                 Box(Modifier.fillMaxSize()) {
-                Box(Modifier.wrapContentSize(Alignment.TopStart).at(133, 100, 1125, 571)) {
+                // Letra en grande de Música: sin barra superior, el área sube a y20 y mide 651 de alto.
+                val tall = s == Section.MUSIC && musicLyrics
+                Box(Modifier.wrapContentSize(Alignment.TopStart).at(133, if (tall) 20 else 100, 1125, if (tall) 651 else 571)) {
                     when (s) {
                         Section.MUSIC -> MusicScreen(
                             m = media,
@@ -504,6 +512,7 @@ fun DashboardApp(c: AppContainer, section: MutableState<Section>, resumeTick: In
                             onRetryLyrics = { c.lyrics.forceRetry() },
                             onSearch = { openSongSearch() },
                             onVoice = { startVoice() },
+                            onLyricsShown = { musicLyrics = it },
                         )
                         Section.APPS -> AppsScreen(
                             system = systemTiles,
@@ -827,6 +836,14 @@ private fun buildDiagnostics(c: AppContainer, hasLocation: Boolean, hasBtPerm: B
             else -> "$pkg (no instalada)"
         }
     })
+    val pmv = c.launcher
+    out += DiagSection("Asistente de voz", listOf(
+        "Último usado" to (pmv.lastVoice ?: "—"),
+        "Voz en Teléfono BT" to (pmv.voiceActivityOf(c.config.packageOf(ExternalApp.PHONE_BT)) ?: "no encontrada"),
+        "VOICE_COMMAND" to pmv.resolversOf(android.content.Intent.ACTION_VOICE_COMMAND),
+        "ASSIST" to pmv.resolversOf(android.content.Intent.ACTION_ASSIST),
+        "VOICE_ASSIST" to pmv.resolversOf("android.intent.action.VOICE_ASSIST"),
+    ))
     out += DiagSection("Actividades de Android Auto (${c.config.packageOf(ExternalApp.ANDROID_AUTO).ifBlank { "sin app" }})",
         c.launcher.activitiesOf(c.config.packageOf(ExternalApp.ANDROID_AUTO)).take(25).mapIndexed { i, a -> "#${i + 1}" to a })
     out += DiagSection("Últimos intentos de abrir apps", c.launcher.recentLaunches.map { r ->

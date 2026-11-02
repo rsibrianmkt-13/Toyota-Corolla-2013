@@ -148,14 +148,16 @@ fun HomeScreen(
                     HomePage.CLEAN -> CleanScene(speed, media, phoneConnected, phoneName, music, a, onSwipe = { go(it) })
                     HomePage.LYRICS -> {
                         val touches = remember { TouchTicker() }
-                        Box(Modifier.fillMaxSize().onAnyTouch(touches)) {
+                        // Solo el área a la derecha del menú lateral: así los botones del menú siguen funcionando.
+                        Box(Modifier.at(133, 0, 1147, 720).onAnyTouch(touches)) {
                             LyricsPage(
                                 media, lyrics, driving,
-                                Modifier.at(133, 0, 1060, 720).pageSwipe { go(it) },
+                                Modifier.at(0, 0, 1060, 720).pageSwipe { go(it) },
                                 onRetry = a.retryLyrics,
+                                large = true,
                             )
-                            // Volumen táctil (+ / −, pasos de 10 %): aparece al tocar y se oculta solo.
-                            AutoHideVolume(music, touches.tick, Modifier.offset((1280 - 30 - 44).dp, 230.dp))
+                            // Volumen: barra discreta que aparece al tocar y se oculta sola.
+                            AutoHideVolume(music, touches.tick, Modifier.offset((1147 - 30 - 56).dp, 250.dp))
                         }
                     }
                 }

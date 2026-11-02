@@ -293,7 +293,7 @@ private fun Centered(title: String, subtitle: String?) {
  * Detenido: 5 líneas (2 anteriores, la actual grande, 2 siguientes). En movimiento: 3 líneas.
  */
 @Composable
-fun LyricsPage(m: MediaState, lyrics: LyricsState, driving: Boolean, modifier: Modifier, onRetry: (() -> Unit)? = null) {
+fun LyricsPage(m: MediaState, lyrics: LyricsState, driving: Boolean, modifier: Modifier, onRetry: (() -> Unit)? = null, large: Boolean = false) {
     Box(modifier, contentAlignment = Alignment.Center) {
         when (val r = lyrics.result) {
             is LyricsResult.Synced -> {
@@ -311,15 +311,16 @@ fun LyricsPage(m: MediaState, lyrics: LyricsState, driving: Boolean, modifier: M
                         for (k in -span..span) {
                             val t = lines(r.lines, i + k)
                             val style = when {
-                                k == 0 -> DashType.Title.copy(fontSize = 46.sp, lineHeight = 54.sp, fontWeight = FontWeight.SemiBold, color = Dash.Text)
-                                k == 1 -> DashType.Body.copy(fontSize = 27.sp, lineHeight = 34.sp, fontWeight = FontWeight.Medium, color = Dash.Text2)
-                                k == -1 -> DashType.Body.copy(fontSize = 27.sp, lineHeight = 34.sp, fontWeight = FontWeight.Medium, color = Dash.Text3)
-                                else -> DashType.Body.copy(fontSize = 25.sp, lineHeight = 32.sp, fontWeight = FontWeight.Medium, color = Dash.Text3.copy(alpha = 0.55f))
+                                // [large]: página de letra del Inicio (no hay nada más en pantalla) → todo más grande.
+                                k == 0 -> DashType.Title.copy(fontSize = if (large) 60.sp else 46.sp, lineHeight = if (large) 70.sp else 54.sp, fontWeight = FontWeight.SemiBold, color = Dash.Text)
+                                k == 1 -> DashType.Body.copy(fontSize = if (large) 34.sp else 27.sp, lineHeight = if (large) 42.sp else 34.sp, fontWeight = FontWeight.Medium, color = Dash.Text2)
+                                k == -1 -> DashType.Body.copy(fontSize = if (large) 34.sp else 27.sp, lineHeight = if (large) 42.sp else 34.sp, fontWeight = FontWeight.Medium, color = Dash.Text3)
+                                else -> DashType.Body.copy(fontSize = if (large) 30.sp else 25.sp, lineHeight = if (large) 38.sp else 32.sp, fontWeight = FontWeight.Medium, color = Dash.Text3.copy(alpha = 0.55f))
                             }
                             Text(
                                 t, style = style.copy(textAlign = TextAlign.Center, letterSpacing = if (k == 0) (-0.8).sp else (-0.2).sp),
                                 maxLines = if (k == 0) 2 else 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(vertical = if (k == 0) 12.dp else 6.dp),
+                                modifier = Modifier.padding(vertical = if (k == 0) (if (large) 16.dp else 12.dp) else (if (large) 8.dp else 6.dp)),
                             )
                         }
                     }

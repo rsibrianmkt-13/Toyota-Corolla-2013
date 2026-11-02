@@ -163,3 +163,10 @@ Descarga directa del último APK: https://github.com/rsibrianmkt-13/Toyota-Corol
 
 - Volumen en la letra: barra vertical delgada (tocar o arrastrar), se oculta a los 2 s.
 - Micrófono: abre directamente el asistente (Ok Google / Gemini). La lupa avisa si el teléfono no respondió a la búsqueda.
+
+## v1.2.2
+
+- Letra del Inicio: el menú lateral vuelve a responder; letra más grande.
+- Letra en Música: sin barra superior, solo portada, nombre y letra.
+- Barra de volumen más corta y ancha.
+- Micrófono: activa primero el asistente del teléfono a través de la app Teléfono BT; Diagnóstico → "Asistente de voz".
